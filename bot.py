@@ -1,6 +1,6 @@
 import telebot
 
-TOKEN = "ТУТ_ТВОЙ_ТОКЕН"
+TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
 
 bot = telebot.TeleBot(TOKEN)
 
