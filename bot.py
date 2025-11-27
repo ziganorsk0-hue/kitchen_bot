@@ -1,16 +1,19 @@
 import telebot
 from telebot import types
+from flask import Flask, request
+import os
 
 TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
-ADMIN_ID = 927677341   # твой Telegram ID
+ADMIN_ID = 927677341  # твой Telegram ID
 
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
-user_data = {}   # временное хранилище заявок
+user_data = {}  # временное хранилище заявок
 
 
 # -------------------------------
-#  МЕНЮ
+# МЕНЮ
 # -------------------------------
 def main_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -19,7 +22,7 @@ def main_menu():
 
 
 # -------------------------------
-#  START
+# START
 # -------------------------------
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -28,12 +31,13 @@ def start(message):
         "Здравствуйте! 👋\n"
         "Я бот компании *Кухни Майя*.\n"
         "Готов принять заявку.",
-        reply_markup=main_menu()
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
     )
 
 
 # -------------------------------
-#  НАЧАТЬ ЗАЯВКУ
+# НАЧАТЬ ЗАЯВКУ
 # -------------------------------
 @bot.message_handler(func=lambda m: m.text == "📝 Оставить заявку")
 def ask_name(message):
@@ -42,7 +46,7 @@ def ask_name(message):
 
 
 # -------------------------------
-#  ЛОГИКА СБОРА ЗАЯВКИ
+# ЛОГИКА СБОРА ЗАЯВКИ
 # -------------------------------
 @bot.message_handler(func=lambda m: True)
 def form_handler(message):
@@ -77,7 +81,7 @@ def form_handler(message):
         phone = user_data[user_id]["phone"]
         username = message.from_user.username
 
-        # отправка тебе в личку
+        # отправка админу
         bot.send_message(
             ADMIN_ID,
             f"📩 Новая заявка!\n\n"
@@ -98,7 +102,24 @@ def form_handler(message):
 
 
 # -------------------------------
-#  ЗАПУСК
+# WEBHOOK
 # -------------------------------
-print("Бот запущен...")
-bot.infinity_polling()
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    json_data = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_data)
+    bot.process_new_updates([update])
+    return "ok", 200
+
+
+# -------------------------------
+# ЗАПУСК
+# -------------------------------
+if __name__ == "__main__":
+    # URL твоего приложения на Render
+    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
+
+    # Flask сервер
+    app.run(host="0.0.0.0", port=5000)
