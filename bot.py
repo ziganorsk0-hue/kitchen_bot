@@ -1,49 +1,111 @@
-import logging
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
+import telebot
 
-API_TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
+TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
 
-logging.basicConfig(level=logging.INFO)
+bot = telebot.TeleBot(TOKEN)
 
-bot = Bot(token=API_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+user_data = {}   # здесь храним ответы пользователей
 
-# --------- STATES ---------
-class Form(StatesGroup):
-    kitchen_type = State()
-    room_type = State()
-    size = State()
-    contact = State()
 
-# --------- START ---------
-@dp.message_handler(commands=['start'])
-async def start(message: types.Message):
-    await message.answer(
+@bot.message_handler(commands=['start'])
+def start(message):
+    user_id = message.chat.id
+    user_data[user_id] = {}
+
+    bot.send_message(
+        user_id,
         "Здравствуйте! 👋\n"
-        "Я бот компании по изготовлению кухонь.\n"
-        "Помогу подобрать вариант и записаться на замер.\n\n"
-        "Какую кухню вы планируете: прямую, Г-образную или П-образную?"
+        "Я бот компании *Кухни Майя*.\n"
+        "Помогу принять заявку на изготовление корпусной мебели.\n\n"
+        "Как вас зовут?"
     )
-    await Form.kitchen_type.set()
 
-# --------- Q1 ---------
-@dp.message_handler(state=Form.kitchen_type)
-async def process_kitchen_type(message: types.Message, state: FSMContext):
-    await state.update_data(kitchen_type=message.text)
-    await message.answer("Для какого помещения планируете кухню — квартира или дом?")
-    await Form.room_type.set()
 
-# --------- Q2 ---------
-@dp.message_handler(state=Form.room_type)
-async def process_room_type(message: types.Message, state: FSMContext):
-    await state.update_data(room_type=message.text)
-    await message.answer("Подскажите, пожалуйста, примерную длину кухни?")
-    await Form.size.set()
+@bot.message_handler(func=lambda m: True)
+def handle(message):
+    user_id = message.chat.id
+    text = message.text
 
-# --------- Q3 ---------
-@dp.message_handler(state=Form.size)
-async def pro
+    # --- 1. ИМЯ ---
+    if "name" not in user_data[user_id]:
+        user_data[user_id]["name"] = text
+        bot.send_message(
+            user_id,
+            "Приятно познакомиться! 🙌\n"
+            "Какую мебель планируете заказать?\n\n"
+            "Варианты:\n"
+            "• Кухня\n"
+            "• Шкаф\n"
+            "• Гардеробная\n"
+            "• Детская\n"
+            "• В офис\n"
+            "• Другое"
+        )
+        return
+
+    # --- 2. ТИП МЕБЕЛИ ---
+    if "type" not in user_data[user_id]:
+        user_data[user_id]["type"] = text
+        bot.send_message(
+            user_id,
+            "Отлично! 📐\n"
+            "Напишите, пожалуйста, размеры или приблизительную площадь."
+        )
+        return
+
+    # --- 3. РАЗМЕРЫ ---
+    if "size" not in user_data[user_id]:
+        user_data[user_id]["size"] = text
+        bot.send_message(
+            user_id,
+            "Принято! 🎨\n"
+            "Какой стиль мебели вам нравится?\n"
+            "Например: современный, классика, минимализм и т.д."
+        )
+        return
+
+    # --- 4. СТИЛЬ ---
+    if "style" not in user_data[user_id]:
+        user_data[user_id]["style"] = text
+        bot.send_message(
+            user_id,
+            "Спасибо! ❤️\n"
+            "Что вам нужно сейчас?\n"
+            "• Замер\n"
+            "• Расчет стоимости"
+        )
+        return
+
+    # --- 5. ЗАМЕР / РАСЧЁТ ---
+    if "request" not in user_data[user_id]:
+        user_data[user_id]["request"] = text
+
+        data = user_data[user_id]
+
+        # Отправка клиенту подтверждения
+        bot.send_message(
+            user_id,
+            "Отлично! Ваша заявка принята 🙌\n\n"
+            f"Имя: *{data['name']}*\n"
+            f"Мебель: *{data['type']}*\n"
+            f"Размеры: *{data['size']}*\n"
+            f"Стиль: *{data['style']}*\n"
+            f"Потребность: *{data['request']}*\n\n"
+            "Мы свяжемся с вами в ближайшее время!"
+        )
+
+        # Отправка заявки тебе (на твой id)
+        bot.send_message(
+            927677341,
+            "📩 *Новая заявка!* \n\n"
+            f"Имя: {data['name']}\n"
+            f"Мебель: {data['type']}\n"
+            f"Размеры: {data['size']}\n"
+            f"Стиль: {data['style']}\n"
+            f"Потребность: {data['request']}"
+        )
+
+        return
+
+
+bot.polling(non_stop=True)
