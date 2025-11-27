@@ -1,10 +1,10 @@
 import telebot
 
-TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
+TOKEN = "ТВОЙ_ТОКЕН"
 
 bot = telebot.TeleBot(TOKEN)
 
-user_data = {}   # здесь храним ответы пользователей
+user_data = {}   # хранилище данных
 
 
 @bot.message_handler(commands=['start'])
@@ -25,6 +25,12 @@ def start(message):
 def handle(message):
     user_id = message.chat.id
     text = message.text
+
+    # УБИВАЕМ ОШИБКУ KeyError
+    if user_id not in user_data:
+        user_data[user_id] = {}
+        bot.send_message(user_id, "Давайте начнём сначала 🙂\nКак вас зовут?")
+        return
 
     # --- 1. ИМЯ ---
     if "name" not in user_data[user_id]:
@@ -72,40 +78,17 @@ def handle(message):
             "Спасибо! ❤️\n"
             "Что вам нужно сейчас?\n"
             "• Замер\n"
-            "• Расчет стоимости"
+            "• Расчёт стоимости"
         )
         return
 
-    # --- 5. ЗАМЕР / РАСЧЁТ ---
+    # --- 5. Потребность: замер / расчёт ---
     if "request" not in user_data[user_id]:
         user_data[user_id]["request"] = text
 
         data = user_data[user_id]
 
-        # Отправка клиенту подтверждения
+        # Клиенту
         bot.send_message(
             user_id,
             "Отлично! Ваша заявка принята 🙌\n\n"
-            f"Имя: *{data['name']}*\n"
-            f"Мебель: *{data['type']}*\n"
-            f"Размеры: *{data['size']}*\n"
-            f"Стиль: *{data['style']}*\n"
-            f"Потребность: *{data['request']}*\n\n"
-            "Мы свяжемся с вами в ближайшее время!"
-        )
-
-        # Отправка заявки тебе (на твой id)
-        bot.send_message(
-            927677341,
-            "📩 *Новая заявка!* \n\n"
-            f"Имя: {data['name']}\n"
-            f"Мебель: {data['type']}\n"
-            f"Размеры: {data['size']}\n"
-            f"Стиль: {data['style']}\n"
-            f"Потребность: {data['request']}"
-        )
-
-        return
-
-
-bot.polling(non_stop=True)
