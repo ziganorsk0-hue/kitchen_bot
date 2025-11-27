@@ -1,7 +1,6 @@
 import telebot
 
 TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
-
 bot = telebot.TeleBot(TOKEN)
 
 user_data = {}   # хранилище данных
@@ -82,13 +81,41 @@ def handle(message):
         )
         return
 
-    # --- 5. Потребность: замер / расчёт ---
+    # --- 5. Потребность ---
     if "request" not in user_data[user_id]:
         user_data[user_id]["request"] = text
 
         data = user_data[user_id]
 
-        # Клиенту
         bot.send_message(
             user_id,
             "Отлично! Ваша заявка принята 🙌\n\n"
+            "Наш менеджер свяжется с вами в ближайшее время.\n\n"
+            "Ваши данные:\n"
+            f"👤 Имя: {data['name']}\n"
+            f"🪑 Тип мебели: {data['type']}\n"
+            f"📏 Размеры: {data['size']}\n"
+            f"🎨 Стиль: {data['style']}\n"
+            f"📌 Запрос: {data['request']}\n\n"
+            "Оставьте, пожалуйста, номер телефона для связи ☎️"
+        )
+        return
+
+    # --- 6. Телефон ---
+    if "phone" not in user_data[user_id]:
+        user_data[user_id]["phone"] = text
+
+        data = user_data[user_id]
+
+        bot.send_message(
+            user_id,
+            "Спасибо! 🙏\n"
+            "Менеджер скоро свяжется с вами.\n"
+            "Хорошего дня!"
+        )
+
+        # здесь можно добавить отправку в Telegram/CRM/бот-канал
+        return
+
+
+bot.polling(none_stop=True)
