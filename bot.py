@@ -1,97 +1,49 @@
-import telebot
+import logging
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 
-TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
+API_TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
 
-bot = telebot.TeleBot(TOKEN)
+logging.basicConfig(level=logging.INFO)
 
-# Хранилище данных пользователей
-user_data = {}
+bot = Bot(token=API_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
+# --------- STATES ---------
+class Form(StatesGroup):
+    kitchen_type = State()
+    room_type = State()
+    size = State()
+    contact = State()
 
-# === СТАРТ ===
-@bot.message_handler(commands=['start'])
-def start(message):
-    user_id = message.chat.id
-    user_data[user_id] = {"step": "name"}
-
-    bot.send_message(
-        user_id,
-        "Здравствуйте! 👋\n\n"
-        "Я бот компании *Кухни Майя*.\n"
-        "Помогу принять заявку на изготовление мебели.\n\n"
-        "Как вас зовут?"
+# --------- START ---------
+@dp.message_handler(commands=['start'])
+async def start(message: types.Message):
+    await message.answer(
+        "Здравствуйте! 👋\n"
+        "Я бот компании по изготовлению кухонь.\n"
+        "Помогу подобрать вариант и записаться на замер.\n\n"
+        "Какую кухню вы планируете: прямую, Г-образную или П-образную?"
     )
+    await Form.kitchen_type.set()
 
+# --------- Q1 ---------
+@dp.message_handler(state=Form.kitchen_type)
+async def process_kitchen_type(message: types.Message, state: FSMContext):
+    await state.update_data(kitchen_type=message.text)
+    await message.answer("Для какого помещения планируете кухню — квартира или дом?")
+    await Form.room_type.set()
 
-# === ОБЩИЙ ХЭНДЛЕР ===
-@bot.message_handler(func=lambda m: True)
-def handle(message):
-    user_id = message.chat.id
-    text = message.text
+# --------- Q2 ---------
+@dp.message_handler(state=Form.room_type)
+async def process_room_type(message: types.Message, state: FSMContext):
+    await state.update_data(room_type=message.text)
+    await message.answer("Подскажите, пожалуйста, примерную длину кухни?")
+    await Form.size.set()
 
-    # Если нет записи — начинаем сначала
-    if user_id not in user_data:
-        user_data[user_id] = {"step": "name"}
-        bot.send_message(user_id, "Как вас зовут?")
-        return
-
-    step = user_data[user_id]["step"]
-
-    # 1 — Сохраняем имя
-    if step == "name":
-        user_data[user_id]["name"] = text
-        user_data[user_id]["step"] = "type"
-
-        bot.send_message(
-            user_id,
-            "Приятно познакомиться! 😊\n\n"
-            "Какую мебель планируете заказать?\n"
-            "Выберите или напишите свой вариант:\n\n"
-            "• Кухня\n• Шкаф\n• Гардеробная\n• Детская\n• Офисная мебель\n• Другое"
-        )
-        return
-
-    # 2 — Тип мебели
-    if step == "type":
-        user_data[user_id]["type"] = text
-        user_data[user_id]["step"] = "details"
-
-        bot.send_message(
-            user_id,
-            "Отлично!\nНапишите, пожалуйста, *размеры*, *стиль* или любые пожелания.\n"
-            "Можете отправить несколько сообщений — я всё запомню 😊"
-        )
-        return
-
-    # 3 — Клиент описывает детали
-    if step == "details":
-        # сохраняем все сообщения как список
-        if "details" not in user_data[user_id]:
-            user_data[user_id]["details"] = []
-
-        user_data[user_id]["details"].append(text)
-
-        bot.send_message(
-            user_id,
-            "Принял 👍\nЕсли хотите ещё что-то добавить — напишите.\n\n"
-            "Когда готовы, напишите: *готово*"
-        )
-        return
-
-    # 4 — Готово → спросить замер/расчёт
-    if step == "details" and text.lower() == "готово":
-        user_data[user_id]["step"] = "final"
-
-        bot.send_message(
-            user_id,
-            "Что вам нужно? Выберите:\n\n"
-            "🔧 Замер\n📐 Расчёт стоимости"
-        )
-        return
-
-    # 5 — финальный выбор
-    if step == "final":
-        user_data[user_id]["final"] = text
-
-        name = user_data[user_id]["name"]
-        mtype = user_data[user_id]["type"]
+# --------- Q3 ---------
+@dp.message_handler(state=Form.size)
+async def pro
