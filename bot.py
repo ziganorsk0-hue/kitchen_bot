@@ -1,3 +1,8 @@
+# Временный обработчик только для групп
+@bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"])
+def show_group_id(message):
+    print(f"Group ID: {message.chat.id}")  # <-- вот сюда выведется айди группы в логах
+    bot.send_message(message.chat.id, "Бот видит группу! Проверьте логи Render для ID.")  # сообщение в группу (можно убрать)
 import os
 from flask import Flask, request
 import telebot
