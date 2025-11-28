@@ -11,7 +11,8 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # ID группы, куда прих
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
 
-bot = telebot.TeleBot(TOKEN)@bot.message_handler(func=lambda msg: True)
+bot = telebot.TeleBot(TOKEN)
+@bot.message_handler(func=lambda msg: True)
 def show_chat_id(message):
     if message.chat.type in ["group", "supergroup"]:
         print("Group ID:", message.chat.id)  # <-- ID появится в логах Render
