@@ -3,8 +3,8 @@ from flask import Flask, request
 import telebot
 
 # === Настройки ===
-TOKEN = os.getenv("TELEGRAM_TOKEN")       # переменная окружения с токеном
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # переменная окружения с вашим ID
+TOKEN = os.getenv("TELEGRAM_TOKEN")       # Переменная окружения с токеном бота
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Ваш Telegram ID
 
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 # === Состояние пользователей ===
 user_state = {}
-user_answers = []
+user_answers = {}
 
 questions = [
     "1️⃣ Какую мебель планируете заказать? (Кухня, шкаф, гардеробная, тумба и т.д.)",
@@ -26,7 +26,6 @@ questions = [
 # === Удаляем старый webhook и ставим новый ===
 bot.remove_webhook()
 bot.set_webhook(url=f"https://YOUR-APP-NAME.onrender.com/{TOKEN}")  # <-- замените на URL вашего Render-сервиса
-
 
 # === Обработка команды /start ===
 @bot.message_handler(commands=['start'])
@@ -43,7 +42,6 @@ def start(message):
         parse_mode='Markdown'
     )
     bot.send_message(user_id, questions[0])
-
 
 # === Обработка сообщений ===
 @bot.message_handler(func=lambda msg: True)
@@ -102,7 +100,6 @@ def handle_answers(message):
     user_state.pop(user_id)
     user_answers.pop(user_id)
 
-
 # === Flask endpoint для webhook ===
 @app.route(f"/{TOKEN}", methods=['POST'])
 def receive_update():
@@ -111,11 +108,9 @@ def receive_update():
     bot.process_new_updates([update])
     return "OK", 200
 
-
 @app.route("/")
 def index():
     return "Bot is running", 200
-
 
 # === Запуск Flask на Render ===
 if __name__ == "__main__":
