@@ -1,21 +1,21 @@
 import os
+from flask import Flask, request
 import telebot
 
-# === Чтение токена и ID администратора из переменных окружения ===
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+# === Настройки ===
+TOKEN = os.getenv("TELEGRAM_TOKEN")       # переменная окружения с токеном
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # переменная окружения с вашим ID
 
-# Проверка на случай, если токен не установлен
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
 
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
 # === Состояние пользователей ===
-user_state = {}    # текущий шаг опроса
-user_answers = {}  # ответы пользователя
+user_state = {}
+user_answers = []
 
-# === Вопросы для клиента ===
 questions = [
     "1️⃣ Какую мебель планируете заказать? (Кухня, шкаф, гардеробная, тумба и т.д.)",
     "2️⃣ В каком стиле хотите? (современный, классический, минимализм...)",
@@ -23,7 +23,12 @@ questions = [
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-# === Старт бота ===
+# === Удаляем старый webhook и ставим новый ===
+bot.remove_webhook()
+bot.set_webhook(url=f"https://YOUR-APP-NAME.onrender.com/{TOKEN}")  # <-- замените на URL вашего Render-сервиса
+
+
+# === Обработка команды /start ===
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
@@ -37,7 +42,6 @@ def start(message):
         "Давайте уточним несколько моментов 👇",
         parse_mode='Markdown'
     )
-
     bot.send_message(user_id, questions[0])
 
 
@@ -46,14 +50,12 @@ def start(message):
 def handle_answers(message):
     user_id = message.chat.id
 
-    # Если пользователь ещё не начал через /start
     if user_id not in user_state:
         bot.send_message(user_id, "Нажмите /start чтобы начать 😊")
         return
 
     step = user_state[user_id]
 
-    # === Заполняем ответы на вопросы ===
     if step < len(questions):
         user_answers[user_id].append(message.text)
         step += 1
@@ -63,18 +65,17 @@ def handle_answers(message):
             bot.send_message(user_id, questions[step])
             return
         else:
-            # Вопросы закончились — спрашиваем телефон
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             button = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(button)
             bot.send_message(user_id, "Спасибо! 🙌\nПожалуйста, оставьте ваш номер телефона:", reply_markup=markup)
             return
 
-    # === Обработка телефона ===
+    # Обработка телефона
     if message.contact and message.contact.phone_number:
         phone = message.contact.phone_number
     else:
-        phone = message.text  # если ввёл вручную
+        phone = message.text
 
     info = user_answers[user_id]
 
@@ -102,8 +103,21 @@ def handle_answers(message):
     user_answers.pop(user_id)
 
 
-# === Запуск бота ===
-bot.infinity_polling()
-# Удаляем webhook, чтобы можно было использовать polling
-bot.remove_webhook()
-bot.infinity_polling()
+# === Flask endpoint для webhook ===
+@app.route(f"/{TOKEN}", methods=['POST'])
+def receive_update():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+
+@app.route("/")
+def index():
+    return "Bot is running", 200
+
+
+# === Запуск Flask на Render ===
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
