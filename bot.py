@@ -11,27 +11,24 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # ID группы, куда прих
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
 
-bot = telebot.TeleBot(TOKEN)  # создаём объект бота
-
-# временный обработчик для получения ID группы
-@bot.message_handler(func=lambda msg: True)
-def show_chat_id(message):
-    if message.chat.type in ["group", "supergroup"]:
-        print("Group ID:", message.chat.id)  # <-- ID появится в логах Render
-
-
+bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
+
+# ========================
 # Временный обработчик для получения ID группы
+# ========================
 @bot.message_handler(func=lambda msg: True)
 def show_chat_id(message):
     if message.chat.type in ["group", "supergroup"]:
         print("Group ID:", message.chat.id)  # <-- ID появится в логах Render
+        bot.send_message(message.chat.id, "Бот видит группу ✅ ID записан в логах.")
+        return
 
 # ========================
 # Состояние пользователей
 # ========================
 user_state = {}
-user_answers = []
+user_answers = {}
 
 questions = [
     "1️⃣ Какую мебель планируете заказать? (Кухня, шкаф, гардеробная, тумба и т.д.)",
@@ -128,8 +125,3 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-# Временный обработчик для получения ID группы
-@bot.message_handler(func=lambda msg: True)
-def show_chat_id(message):
-    if message.chat.type in ["group", "supergroup"]:
-        print("Group ID:", message.chat.id)  # <-- этот ID появится в логах Render
