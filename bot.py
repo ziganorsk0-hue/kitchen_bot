@@ -1,152 +1,96 @@
 import telebot
-from telebot import types
-from flask import Flask, request
 import os
 
-# 👉 Твой токен
-TOKEN = "8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8"
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-# 👉 Твой Telegram ID (чтобы заявки приходили в личку)
-ADMIN_ID = 927677341
+bot = telebot.TeleBot(TOKEN)
 
-bot = telebot.TeleBot(TOKEN, threaded=False)
-server = Flask(__name__)
-
-user_state = {}
-user_data = {}
-
-# -------------------------------
-# МЕНЮ
-# -------------------------------
-def main_menu():
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("📝 Оставить заявку", "💬 Консультация")
-    return kb
+user_state = {}          # состояние клиента
+user_answers = {}        # ответы клиента
 
 
-# -------------------------------
-# START
-# -------------------------------
+questions = [
+    "1️⃣ Какую мебель планируете заказать? (Кухня, шкаф, гардеробная, тумба и т.д.)",
+    "2️⃣ В каком стиле хотите? (современный, классический, минимализм...)",
+    "3️⃣ На какой стадии ремонт?",
+    "4️⃣ На какой примерно бюджет ориентируетесь?"
+]
+
+
 @bot.message_handler(commands=['start'])
 def start(message):
+    user_id = message.chat.id
+    user_state[user_id] = 0
+    user_answers[user_id] = []
+
     bot.send_message(
-        message.chat.id,
+        user_id,
         "Здравствуйте! 👋\n"
-        "Я Павел, мастер компании *Кухни Майя*.\n"
-        "Делаю кухни и корпусную мебель на заказ.\n\n"
-        "Чем могу помочь? 🙂",
-        reply_markup=main_menu(),
-        parse_mode="Markdown"
+        "Вы попали в *Кухни на заказ «Майя»*. Я помогаю с расчётом стоимости и консультацией.\n\n"
+        "Давайте уточним несколько моментов 👇"
     )
 
-
-# -------------------------------
-# НАЧАТЬ ЗАЯВКУ
-# -------------------------------
-@bot.message_handler(func=lambda m: m.text == "📝 Оставить заявку")
-def start_form(message):
-    chat_id = message.chat.id
-
-    user_state[chat_id] = "q1"
-    user_data[chat_id] = {}
-
-    bot.send_message(chat_id, "1️⃣ Какую мебель планируете заказать?")
+    bot.send_message(user_id, questions[0])
 
 
-# -------------------------------
-# КОНСУЛЬТАЦИЯ
-# -------------------------------
-@bot.message_handler(func=lambda m: m.text == "💬 Консультация")
-def consult(message):
-    bot.send_message(
-        message.chat.id,
-        "С удовольствием помогу! 😊\nОпишите, что хотите — и я подскажу лучшее решение."
-    )
+@bot.message_handler(func=lambda msg: True)
+def handle_answers(message):
+    user_id = message.chat.id
 
-
-# -------------------------------
-# ЛОГИКА ОПРОСА
-# -------------------------------
-@bot.message_handler(func=lambda m: m.chat.id in user_state)
-def form_logic(message):
-    chat_id = message.chat.id
-    text = message.text
-    state = user_state[chat_id]
-
-    if state == "q1":
-        user_data[chat_id]["type"] = text
-        bot.send_message(chat_id, "2️⃣ Какой стиль предпочитаете?")
-        user_state[chat_id] = "q2"
+    # если человек пишет без /start
+    if user_id not in user_state:
+        bot.send_message(user_id, "Нажмите /start чтобы начать 😊")
         return
 
-    if state == "q2":
-        user_data[chat_id]["style"] = text
-        bot.send_message(chat_id, "3️⃣ На какой стадии ремонт?")
-        user_state[chat_id] = "q3"
-        return
+    # сохраняем ответ
+    step = user_state[user_id]
+    user_answers[user_id].append(message.text)
 
-    if state == "q3":
-        user_data[chat_id]["repair"] = text
-        bot.send_message(chat_id, "4️⃣ На какой бюджет ориентируетесь?")
-        user_state[chat_id] = "q4"
-        return
-
-    if state == "q4":
-        user_data[chat_id]["budget"] = text
-        bot.send_message(chat_id, "5️⃣ Оставьте, пожалуйста, ваш номер телефона 📞")
-        user_state[chat_id] = "phone"
-        return
-
-    if state == "phone":
-        user_data[chat_id]["phone"] = text
-
-        data = user_data[chat_id]
-        username = message.from_user.username or "—"
-
+    # если это был последний вопрос
+    if step == len(questions) - 1:
         bot.send_message(
-            ADMIN_ID,
-            f"📩 *Новая заявка!*\n\n"
-            f"📦 Мебель: {data['type']}\n"
-            f"🎨 Стиль: {data['style']}\n"
-            f"🏡 Ремонт: {data['repair']}\n"
-            f"💵 Бюджет: {data['budget']}\n"
-            f"📞 Телефон: {data['phone']}\n"
-            f"🧑 Клиент: @{username}",
-            parse_mode="Markdown"
+            user_id,
+            "Спасибо! 🙌\n"
+            "Готов предложить варианты. Могу записать вас на бесплатный замер 📏 или провести консультацию.\n\n"
+            "Оставьте, пожалуйста, номер телефона."
+        )
+        user_state[user_id] += 1
+        return
+
+    # если вопрос не последний — задаём следующий
+    user_state[user_id] += 1
+    bot.send_message(user_id, questions[user_state[user_id]])
+
+
+    # после телефона — отправляем заявку тебе
+    if user_state[user_id] == len(questions) + 1:
+        phone = message.text
+        info = user_answers[user_id]
+
+        text = (
+            "🔔 *Новая заявка!*\n\n"
+            f"1. Мебель: {info[0]}\n"
+            f"2. Стиль: {info[1]}\n"
+            f"3. Ремонт: {info[2]}\n"
+            f"4. Бюджет: {info[3]}\n"
+            f"📱 Телефон: {phone}\n"
+            f"🧍‍♂️ Клиент: @{message.from_user.username}"
         )
 
+        if ADMIN_ID:
+            bot.send_message(ADMIN_ID, text, parse_mode='Markdown')
+
         bot.send_message(
-            chat_id,
-            "Спасибо! 🙌 Я получил вашу заявку. Скоро свяжусь 😊",
-            reply_markup=main_menu()
+            user_id,
+            "Спасибо! 🙏 Я передал заявку мастеру. "
+            "В ближайшее время вам перезвонят."
         )
 
-        del user_state[chat_id]
-        del user_data[chat_id]
-        return
-
-
-# -------------------------------
-# FLASK + WEBHOOK ДЛЯ RENDER
-# -------------------------------
-@server.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    json_str = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "OK", 200
-
-
-@server.route("/", methods=["GET"])
-def index():
-    return "Bot is running!", 200
+        # очищаем состояние
+        user_state.pop(user_id)
+        user_answers.pop(user_id)
 
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-
-    # Render создаёт переменную окружения с доменом
-    APP_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')}/{TOKEN}"
-
-    bot.set_webhook(url=APP_URL)
-    server.run(host="0.0.0.0", port=5000)
+    bot.infinity_polling()
