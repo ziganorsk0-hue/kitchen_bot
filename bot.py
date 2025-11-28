@@ -3,7 +3,7 @@ from flask import Flask, request
 import telebot
 
 # === Настройки ===
-TOKEN = os.getenv("TELEGRAM_TOKEN")       # Переменная окружения с токеном бота
+TOKEN = os.getenv("TELEGRAM_TOKEN")       # Токен бота
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Ваш Telegram ID
 
 if not TOKEN:
@@ -25,7 +25,7 @@ questions = [
 
 # === Удаляем старый webhook и ставим новый ===
 bot.remove_webhook()
-bot.set_webhook(url=f"https://YOUR-APP-NAME.onrender.com/{TOKEN}")  # <-- замените на URL вашего Render-сервиса
+bot.set_webhook(url=f"https://YOUR-APP-NAME.onrender.com/{TOKEN}")  # <-- замените на URL вашего сервиса в Render
 
 # === Обработка команды /start ===
 @bot.message_handler(commands=['start'])
