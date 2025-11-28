@@ -104,3 +104,6 @@ def handle_answers(message):
 
 # === Запуск бота ===
 bot.infinity_polling()
+# Удаляем webhook, чтобы можно было использовать polling
+bot.remove_webhook()
+bot.infinity_polling()
