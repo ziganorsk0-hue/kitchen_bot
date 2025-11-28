@@ -99,7 +99,7 @@ def handle_answers(message):
 # Webhook для Render
 # ========================
 bot.remove_webhook()
-bot.set_webhook(url=f"https://YOUR-APP-NAME.onrender.com/{TOKEN}")  # <-- замените на URL вашего приложения
+bot.set_webhook(url=f"https://kitchen-bot-ou9m.onrender.com/{TOKEN}")  # <-- замените на URL вашего приложения
 
 @app.route(f"/{TOKEN}", methods=['POST'])
 def receive_update():
