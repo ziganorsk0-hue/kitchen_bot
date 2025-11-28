@@ -6,7 +6,7 @@ import telebot
 # Настройки
 # ========================
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Потом сюда вставишь ID группы
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
@@ -14,11 +14,24 @@ if not TOKEN:
 bot = telebot.TeleBot(TOKEN)
 
 # ========================
+# ЛОГИРОВАНИЕ ВСЕХ ВХОДЯЩИХ СООБЩЕНИЙ (добавил!)
+# ========================
+@bot.middleware_handler(update_types=['message'])
+def log_updates(bot_instance, message):
+    print("\n========== NEW UPDATE ==========")
+    print(f"Chat ID: {message.chat.id}")
+    print(f"Chat type: {message.chat.type}")
+    print(f"User ID: {message.from_user.id}")
+    print(f"Text: {message.text}")
+    print("================================\n")
+
+
+# ========================
 # ВРЕМЕННЫЙ обработчик для получения ID группы
 # ========================
 @bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"])
 def get_group_id(message):
-    print(f"GROUP ID: {message.chat.id}")  # <-- Появится в логах Render
+    print(f"GROUP ID DETECTED: {message.chat.id}")
     bot.send_message(message.chat.id, "Группу вижу! Проверьте логи Render для ID.")
 
 
