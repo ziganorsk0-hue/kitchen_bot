@@ -13,6 +13,11 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
+# Временный обработчик для получения ID группы
+@bot.message_handler(func=lambda msg: True)
+def show_chat_id(message):
+    if message.chat.type in ["group", "supergroup"]:
+        print("Group ID:", message.chat.id)  # <-- ID появится в логах Render
 
 # ========================
 # Состояние пользователей
