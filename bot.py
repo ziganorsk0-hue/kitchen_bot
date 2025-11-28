@@ -2,31 +2,112 @@ import os
 from flask import Flask, request
 import telebot
 
-# Токен бота из переменной окружения
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+# ========================
+# Настройки
+# ========================
+TOKEN = os.getenv("TELEGRAM_TOKEN")  # Токен бота
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # После узнавания ID вставишь сюда
+
 if not TOKEN:
-    raise ValueError("TELEGRAM_TOKEN не задан!")
+    raise ValueError("Ошибка: TELEGRAM_TOKEN не задан!")
 
 bot = telebot.TeleBot(TOKEN)
+
+# ========================
+# ВРЕМЕННЫЙ хендлер для получения ID группы
+# ========================
+@bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"])
+def get_group_id(message):
+    group_id = message.chat.id
+    print(f"===== GROUP ID =====\n{group_id}")  # <-- ID будет в логах Render
+    bot.send_message(group_id, f"Группу вижу! ID: {group_id}. Проверьте логи Render.")
+
+# ========================
+# Основная логика бота
+# ========================
+user_state = {}
+user_answers = {}
+
+questions = [
+    "1️⃣ Какую мебель планируете заказать?",
+    "2️⃣ В каком стиле хотите?",
+    "3️⃣ На какой стадии ремонт?",
+    "4️⃣ На какой примерно бюджет ориентируетесь?"
+]
+
+# ========================
+# Старт
+# ========================
+@bot.message_handler(commands=['start'])
+def start(message):
+    if message.chat.type != "private":
+        return
+
+    user_id = message.chat.id
+    user_state[user_id] = 0
+    user_answers[user_id] = []
+
+    bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
+    bot.send_message(user_id, questions[0])
+
+# ========================
+# Обработка ответов
+# ========================
+@bot.message_handler(func=lambda msg: msg.chat.type == "private")
+def handle_answers(message):
+    user_id = message.chat.id
+
+    if user_id not in user_state:
+        bot.send_message(user_id, "Нажмите /start, чтобы начать.")
+        return
+
+    step = user_state[user_id]
+
+    # Сохраняем ответ
+    if step < len(questions):
+        user_answers[user_id].append(message.text)
+        user_state[user_id] += 1
+
+        if user_state[user_id] < len(questions):
+            bot.send_message(user_id, questions[user_state[user_id]])
+            return
+        else:
+            # Запрос контакта
+            markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
+            markup.add(btn)
+            bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
+            return
+
+    # Телефон
+    phone = message.contact.phone_number if message.contact else message.text
+
+    info = user_answers[user_id]
+    text = (
+        "🔔 *Новая заявка!* \n\n"
+        f"1. Мебель: {info[0]}\n"
+        f"2. Стиль: {info[1]}\n"
+        f"3. Ремонт: {info[2]}\n"
+        f"4. Бюджет: {info[3]}\n"
+        f"📱 Телефон: {phone}\n"
+        f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
+    )
+
+    if ADMIN_ID != 0:
+        bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
+
+    bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
+                     reply_markup=telebot.types.ReplyKeyboardRemove())
+
+    # Очистка
+    user_state.pop(user_id)
+    user_answers.pop(user_id)
+
+# ========================
+# Webhook для Render
+# ========================
 app = Flask(__name__)
 
-# ============================
-# Временный обработчик для получения ID группы
-# ============================
-@bot.message_handler(func=lambda msg: True)
-def show_group_id(message):
-    # Печатаем все данные о чате
-    print("Сообщение пришло в чат:", message.chat)
-    
-    # Если это группа или супергруппа
-    if message.chat.type in ["group", "supergroup"]:
-        print("===== GROUP ID =====")
-        print(message.chat.id)  # <-- здесь появится ID в логах Render
-        bot.send_message(message.chat.id, "Бот видит группу! Проверьте логи Render для ID.")
-
-# ============================
-# Webhook для Render
-# ============================
 bot.remove_webhook()
 bot.set_webhook(url=f"https://kitchen-bot-ou9m.onrender.com/{TOKEN}")
 
