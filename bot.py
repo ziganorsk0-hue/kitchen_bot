@@ -1,8 +1,3 @@
-# Временный обработчик только для групп
-@bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"])
-def show_group_id(message):
-    print(f"Group ID: {message.chat.id}")  # <-- вот сюда выведется айди группы в логах
-    bot.send_message(message.chat.id, "Бот видит группу! Проверьте логи Render для ID.")  # сообщение в группу (можно убрать)
 import os
 from flask import Flask, request
 import telebot
@@ -10,122 +5,122 @@ import telebot
 # ========================
 # Настройки
 # ========================
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # Ваш токен бота
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # ID группы, куда приходят заявки
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Потом сюда вставишь ID группы
 
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
 
 bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
 
 # ========================
-# Временный обработчик для получения ID группы
+# ВРЕМЕННЫЙ обработчик для получения ID группы
 # ========================
-@bot.message_handler(func=lambda msg: True)
-def show_chat_id(message):
-    if message.chat.type in ["group", "supergroup"]:
-        print("Group ID:", message.chat.id)  # <-- ID появится в логах Render
-        bot.send_message(message.chat.id, "Бот видит группу ✅ ID записан в логах.")
-        return
+@bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"])
+def get_group_id(message):
+    print(f"GROUP ID: {message.chat.id}")  # <-- Появится в логах Render
+    bot.send_message(message.chat.id, "Группу вижу! Проверьте логи Render для ID.")
+
 
 # ========================
-# Состояние пользователей
+# Основная логика бота
 # ========================
 user_state = {}
 user_answers = {}
 
 questions = [
-    "1️⃣ Какую мебель планируете заказать? (Кухня, шкаф, гардеробная, тумба и т.д.)",
-    "2️⃣ В каком стиле хотите? (современный, классический, минимализм...)",
+    "1️⃣ Какую мебель планируете заказать?",
+    "2️⃣ В каком стиле хотите?",
     "3️⃣ На какой стадии ремонт?",
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-# ========================
-# Обработчик /start
-# ========================
 @bot.message_handler(commands=['start'])
 def start(message):
     if message.chat.type != "private":
-        return  # Игнорируем сообщения из группы
+        return
+
     user_id = message.chat.id
     user_state[user_id] = 0
     user_answers[user_id] = []
-    bot.send_message(user_id, "Здравствуйте! 👋 Я помогу с расчётом стоимости и консультацией.\n\nДавайте уточним несколько моментов 👇")
+
+    bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
     bot.send_message(user_id, questions[0])
 
-# ========================
-# Обработка ответов
-# ========================
-@bot.message_handler(func=lambda msg: True)
+@bot.message_handler(func=lambda msg: msg.chat.type == "private")
 def handle_answers(message):
-    if message.chat.type != "private":
-        return  # Игнорируем группу
-
     user_id = message.chat.id
+
     if user_id not in user_state:
-        bot.send_message(user_id, "Нажмите /start чтобы начать 😊")
+        bot.send_message(user_id, "Нажмите /start, чтобы начать.")
         return
 
     step = user_state[user_id]
 
+    # Сохраняем ответ
     if step < len(questions):
         user_answers[user_id].append(message.text)
-        step += 1
-        user_state[user_id] = step
+        user_state[user_id] += 1
 
-        if step < len(questions):
-            bot.send_message(user_id, questions[step])
+        # Следующий вопрос
+        if user_state[user_id] < len(questions):
+            bot.send_message(user_id, questions[user_state[user_id]])
+            return
         else:
+            # Просим номер телефона
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-            button = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
-            markup.add(button)
-            bot.send_message(user_id, "Спасибо! 🙌\nПожалуйста, оставьте ваш номер телефона:", reply_markup=markup)
-        return
+            btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
+            markup.add(btn)
+            bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
+            return
 
-    # Обработка телефона
-    if message.contact and message.contact.phone_number:
-        phone = message.contact.phone_number
-    else:
-        phone = message.text
+    # Телефон
+    phone = message.contact.phone_number if message.contact else message.text
 
     info = user_answers[user_id]
+
     text = (
-        "🔔 *Новая заявка!*\n\n"
+        "🔔 *Новая заявка!* \n\n"
         f"1. Мебель: {info[0]}\n"
         f"2. Стиль: {info[1]}\n"
         f"3. Ремонт: {info[2]}\n"
         f"4. Бюджет: {info[3]}\n"
         f"📱 Телефон: {phone}\n"
-        f"🧍‍♂️ Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
+        f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
     )
 
-    if ADMIN_ID:
-        bot.send_message(ADMIN_ID, text, parse_mode='Markdown')
+    if ADMIN_ID != 0:
+        bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
 
-    bot.send_message(user_id, "Спасибо! 🙏 Я передал заявку мастеру.", reply_markup=telebot.types.ReplyKeyboardRemove())
+    bot.send_message(
+        user_id,
+        "Спасибо! Я передал заявку мастеру.",
+        reply_markup=telebot.types.ReplyKeyboardRemove()
+    )
 
-    # Очистка состояния
     user_state.pop(user_id)
     user_answers.pop(user_id)
+
 
 # ========================
 # Webhook для Render
 # ========================
+app = Flask(__name__)
+
 bot.remove_webhook()
-bot.set_webhook(url=f"https://kitchen-bot-ou9m.onrender.com/{TOKEN}")  # <-- замените на URL вашего приложения
+bot.set_webhook(url=f"https://kitchen-bot-ou9m.onrender.com/{TOKEN}")
 
 @app.route(f"/{TOKEN}", methods=['POST'])
 def receive_update():
-    json_string = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_string)
+    json_str = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "OK", 200
 
 @app.route("/")
 def index():
     return "Bot is running", 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
