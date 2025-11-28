@@ -25,7 +25,7 @@ questions = [
 
 # === Удаляем старый webhook и ставим новый ===
 bot.remove_webhook()
-bot.set_webhook(url=f"https://YOUR-APP-NAME.onrender.com/{TOKEN}")  # <-- замените на URL вашего сервиса в Render
+bot.set_webhook(url=f"https://kitchen-bot-ou9m.onrender.com/{TOKEN}")  # <-- замените на URL вашего сервиса в Render
 
 # === Обработка команды /start ===
 @bot.message_handler(commands=['start'])
