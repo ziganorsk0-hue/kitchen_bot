@@ -115,3 +115,8 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+# Временный обработчик для получения ID группы
+@bot.message_handler(func=lambda msg: True)
+def show_chat_id(message):
+    if message.chat.type in ["group", "supergroup"]:
+        print("Group ID:", message.chat.id)  # <-- этот ID появится в логах Render
