@@ -1,25 +1,35 @@
 import os
 from flask import Flask, request
 import telebot
+import sys
 
 # ========================
-# Настройки
+# Переменные окружения
 # ========================
-TOKEN = os.getenv("8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8")  # токен бота
-ADMIN_ID = int(os.getenv("-1003493427992", "0"))  # ID администратора
-RENDER_URL = os.getenv(") https://kitchen-bot-ou9m.onrender.com/123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
- # публичный домен Render
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
 
+# Проверка переменных
 if not TOKEN:
-    raise ValueError("TELEGRAM_TOKEN не задан!")
+    print("❌ Ошибка: TELEGRAM_TOKEN не задан!")
+    sys.exit(1)
+if not ADMIN_ID:
+    print("❌ Ошибка: ADMIN_ID не задан!")
+    sys.exit(1)
 if not RENDER_URL:
-    raise ValueError("RENDER_EXTERNAL_URL не задан!")
+    print("❌ Ошибка: RENDER_EXTERNAL_URL не задан!")
+    sys.exit(1)
+
+ADMIN_ID = int(ADMIN_ID)
+WEBHOOK_URL = f"https://{RENDER_URL}/{TOKEN}"
+print(f"✅ WEBHOOK_URL: {WEBHOOK_URL}")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 # ========================
-# Вопросы для опроса
+# Вопросы
 # ========================
 questions = [
     "1️⃣ Какую мебель планируете заказать?",
@@ -32,7 +42,7 @@ user_state = {}
 user_answers = {}
 
 # ========================
-# Команда /start
+# /start
 # ========================
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -43,7 +53,7 @@ def start(message):
     bot.send_message(user_id, questions[0])
 
 # ========================
-# Лог всех сообщений
+# Логирование всех сообщений
 # ========================
 @bot.message_handler(func=lambda msg: True)
 def log_all(msg):
@@ -60,16 +70,10 @@ def log_all(msg):
         bot.send_message(msg.chat.id, "Группу вижу! Посмотрите ID в логах Render.")
 
 # ========================
-# Логика для лички
+# Логика лички
 # ========================
 def process_private(message):
     user_id = message.chat.id
-
-    if message.text == "/start" and user_id not in user_state:
-        user_state[user_id] = 0
-        user_answers[user_id] = []
-        bot.send_message(user_id, questions[0])
-        return
 
     if user_id not in user_state:
         bot.send_message(user_id, "Нажмите /start, чтобы начать.")
@@ -103,9 +107,7 @@ def process_private(message):
         f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
     )
 
-    if ADMIN_ID != 0:
-        bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
-
+    bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
     bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
                      reply_markup=telebot.types.ReplyKeyboardRemove())
 
@@ -115,10 +117,13 @@ def process_private(message):
 # ========================
 # Настройка webhook
 # ========================
-WEBHOOK_URL = f"https://{RENDER_URL}/{TOKEN}"
-
 bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
+try:
+    bot.set_webhook(url=WEBHOOK_URL)
+    print("✅ Webhook установлен успешно!")
+except Exception as e:
+    print("❌ Ошибка при установке webhook:", e)
+    sys.exit(1)
 
 # ========================
 # Flask маршруты
@@ -130,7 +135,6 @@ def receive_update():
     bot.process_new_updates([update])
     return "OK", 200
 
-# GET маршрут для проверки в браузере
 @app.route(f"/{TOKEN}", methods=['GET'])
 def test_webhook():
     return "Webhook OK", 200
