@@ -63,14 +63,15 @@ def get_main_menu():
     return markup
 
 # ========================
-# /start
+# Кнопка "Начать" для любых сообщений
 # ========================
-@bot.message_handler(commands=["start"])
-def start_command(message):
+@bot.message_handler(func=lambda message: True, content_types=["text"])
+def show_start_button(message):
     user_id = message.chat.id
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
-    bot.send_message(user_id, "Привет! Нажми кнопку чтобы начать:", reply_markup=markup)
+    if user_id not in user_state:
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
+        bot.send_message(user_id, "Привет! Нажми кнопку чтобы начать:", reply_markup=markup)
 
 # ========================
 # Обработка callback
@@ -151,8 +152,7 @@ def process_messages(msg):
     step = user_state.get(user_id)
 
     if step is None:
-        # Пользователь ещё не начал заявку или замер
-        return
+        return  # ещё не начали заявку/замер
 
     # Запись на замер
     if isinstance(step, str) and step.startswith("phone_for_measure_"):
