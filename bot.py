@@ -58,9 +58,6 @@ def get_main_menu():
 def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
-# ========================
-# Автозапуск при входе
-# ========================
 @bot.message_handler(func=lambda message: True)
 def greet_first(message):
     user_id = message.chat.id
@@ -92,16 +89,16 @@ def handle_menu(call):
         handle_day_selection(call)
 
 # ========================
-# Календарь на месяц (русский)
+# Календарь на месяц
 # ========================
 def build_calendar():
-    markup = InlineKeyboardMarkup(row_width=7)  # 7 кнопок в строке
+    markup = InlineKeyboardMarkup(row_width=7)
     today = datetime.date.today()
     buttons = []
     for i in range(30):
         day = today + datetime.timedelta(days=i)
-        label = day.strftime("%a, %d %b")  # Пн, 01 Ноя
-        callback = f"day_{day.isoformat()}"  # без пробелов
+        label = day.strftime("%a, %d %b")
+        callback = f"day_{day.isoformat()}"
         buttons.append(InlineKeyboardButton(label, callback_data=callback))
     markup.add(*buttons)
     return markup
@@ -114,14 +111,12 @@ def handle_day_selection(call):
     user_id = call.message.chat.id
     date_iso = call.data[4:]  # yyyy-mm-dd
     date_obj = datetime.date.fromisoformat(date_iso)
-    formatted_date = date_obj.strftime("%A, %d %B")  # полное название дня на русском
+    formatted_date = date_obj.strftime("%A, %d %B")
 
-    # Кнопка для отправки номера телефона
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     btn = KeyboardButton("Отправить номер телефона", request_contact=True)
     markup.add(btn)
 
-    # Сохраняем состояние пользователя
     user_state[user_id] = f"phone_for_measure_{date_iso}"
 
     bot.send_message(
@@ -153,22 +148,26 @@ def process_messages(msg):
 
     step = user_state[user_id]
 
-    if isinstance(step, int) and step < len(questions):
-        user_answers[user_id].append(msg.text)
-        user_state[user_id] += 1
-        if user_state[user_id] < len(questions):
-            bot.send_message(user_id, questions[user_state[user_id]])
+    # Вопросы заявки
+    if isinstance(step, int):
+        user_answers.setdefault(user_id, []).append(msg.text)
+        step += 1
+        if step < len(questions):
+            user_state[user_id] = step
+            bot.send_message(user_id, questions[step])
         else:
+            # последний шаг — запрос телефона
+            user_state[user_id] = "phone_for_request"
             markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
             bot.send_message(user_id, "Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
-    # Отправка заявки
-    if isinstance(step, int) and step == len(questions):
+    # Получаем телефон для заявки
+    if user_state[user_id] == "phone_for_request":
         phone = msg.contact.phone_number if msg.contact else msg.text
-        info = user_answers[user_id]
+        info = user_answers.get(user_id, [])
         txt = (
             "🔔 *Новая заявка!*\n\n"
             f"1. Мебель: {info[0]}\n"
@@ -181,8 +180,8 @@ def process_messages(msg):
         bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
         bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
 
-        user_state.pop(user_id)
-        user_answers.pop(user_id)
+        user_state.pop(user_id, None)
+        user_answers.pop(user_id, None)
 
 # ========================
 # WEBHOOK
