@@ -1,24 +1,17 @@
 import os
+import sys
 from flask import Flask, request
 import telebot
-import sys
 
 # ========================
 # Переменные окружения
 # ========================
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # токен бота
-ADMIN_ID = os.getenv("ADMIN_ID")     # твой Telegram ID числом
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # только домен, без https://
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # только домен
 
-# Проверка переменных
-if not TOKEN:
-    print("❌ Ошибка: TELEGRAM_TOKEN не задан!")
-    sys.exit(1)
-if not ADMIN_ID:
-    print("❌ Ошибка: ADMIN_ID не задан!")
-    sys.exit(1)
-if not RENDER_URL:
-    print("❌ Ошибка: RENDER_EXTERNAL_URL не задан!")
+if not TOKEN or not ADMIN_ID or not RENDER_URL:
+    print("❌ Ошибка: убедитесь, что заданы TELEGRAM_TOKEN, ADMIN_ID и RENDER_EXTERNAL_URL")
     sys.exit(1)
 
 ADMIN_ID = int(ADMIN_ID)
@@ -53,7 +46,7 @@ def start(message):
     bot.send_message(user_id, questions[0])
 
 # ========================
-# Логирование всех сообщений
+# Логирование сообщений
 # ========================
 @bot.message_handler(func=lambda msg: True)
 def log_all(msg):
