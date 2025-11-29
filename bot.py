@@ -48,6 +48,15 @@ def get_main_menu():
     return markup
 
 # ========================
+# Автоприветствие
+# ========================
+@bot.my_chat_member_handler(func=lambda msg: True)
+def auto_start(msg):
+    if msg.new_chat_member.status == "member" or msg.new_chat_member.status == "administrator":
+        user_id = msg.from_user.id
+        bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
+
+# ========================
 # /start
 # ========================
 @bot.message_handler(commands=['start'])
@@ -79,21 +88,22 @@ def start_request(call):
     bot.send_message(user_id, questions[0])
 
 # ========================
-# Календарь на месяц
+# Календарь на весь месяц с месяцем и днями недели
 # ========================
 def build_calendar():
-    markup = InlineKeyboardMarkup(row_width=7)
+    markup = InlineKeyboardMarkup()
     today = datetime.date.today()
-    year, month = today.year, today.month
+    year = today.year
+    month = today.month
+    month_name = calendar.month_name[month]
 
-    # Заголовок месяца
-    month_name = today.strftime("%B %Y")
-    markup.add(InlineKeyboardButton(f"📅 {month_name}", callback_data="ignore"))
+    # Заголовок с месяцем
+    markup.add(InlineKeyboardButton(f"{month_name} {year}", callback_data="ignore"))
 
-    # Дни недели
-    weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    row = [InlineKeyboardButton(day, callback_data="ignore") for day in weekdays]
-    markup.row(*row)
+    # Заголовки дней недели
+    week_days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    week_row = [InlineKeyboardButton(day, callback_data="ignore") for day in week_days]
+    markup.add(*week_row)
 
     # Дни месяца
     month_calendar = calendar.monthcalendar(year, month)
@@ -103,17 +113,15 @@ def build_calendar():
             if day == 0:
                 row.append(InlineKeyboardButton(" ", callback_data="ignore"))
             else:
-                date = datetime.date(year, month, day)
-                label = f"{day} ({date.strftime('%a')})"
-                row.append(InlineKeyboardButton(label, callback_data=f"day_{date}"))
-        markup.row(*row)
-
+                day_date = datetime.date(year, month, day)
+                row.append(InlineKeyboardButton(str(day), callback_data=f"day_{day_date}"))
+        markup.add(*row)
     return markup
 
 @bot.callback_query_handler(func=lambda call: call.data == "measure")
 def measure(call):
     bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, "Выберите удобный день:", reply_markup=build_calendar())
+    bot.send_message(call.message.chat.id, "Выберите удобный день для замера:", reply_markup=build_calendar())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("day_"))
 def choose_day(call):
