@@ -26,20 +26,9 @@ user_state = {}
 users_started = set()
 
 # ========================
-# Русские дни недели и месяцы
+# Русские дни недели
 # ========================
-RU_MONTHS = {
-    1: "Января", 2: "Февраля", 3: "Марта", 4: "Апреля",
-    5: "Мая", 6: "Июня", 7: "Июля", 8: "Августа",
-    9: "Сентября", 10: "Октября", 11: "Ноября", 12: "Декабря"
-}
-
 RU_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-
-def format_date_ru(date_obj):
-    day_of_week = RU_DAYS[date_obj.weekday()]
-    month = RU_MONTHS[date_obj.month]
-    return f"{day_of_week}, {date_obj.day} {month}"
 
 # ========================
 # Главное меню
@@ -90,7 +79,7 @@ def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
 # ========================
-# Календарь 30 дней с красивой разбивкой по неделям
+# Календарь 30 дней: день недели + число
 # ========================
 def build_calendar():
     markup = InlineKeyboardMarkup(row_width=7)
@@ -100,7 +89,8 @@ def build_calendar():
     week_buttons = []
     
     for i, day in enumerate(days, start=1):
-        label = format_date_ru(day)
+        day_of_week = RU_DAYS[day.weekday()]       # Пн, Вт и т.д.
+        label = f"{day_of_week} {day.day}"         # Пн 29, Вт 30 ...
         callback = f"day_{day.isoformat()}"
         week_buttons.append(InlineKeyboardButton(label, callback_data=callback))
 
@@ -120,8 +110,6 @@ def handle_day_selection(call):
     bot.answer_callback_query(call.id)
     user_id = call.message.chat.id
     date_iso = call.data[4:]
-    date_obj = datetime.date.fromisoformat(date_iso)
-    formatted_date = format_date_ru(date_obj)
 
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     btn = KeyboardButton("Отправить номер телефона", request_contact=True)
@@ -131,8 +119,7 @@ def handle_day_selection(call):
 
     bot.send_message(
         user_id,
-        f"Вы выбрали день: *{formatted_date}*\nОставьте номер телефона для записи на замер:",
-        parse_mode="Markdown",
+        f"Вы выбрали день: {date_iso}\nОставьте номер телефона для записи на замер:",
         reply_markup=markup
     )
 
@@ -168,4 +155,4 @@ def index():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.
