@@ -66,7 +66,6 @@ def greet_first(message):
     user_id = message.chat.id
     if user_id not in user_state:
         greet_user(user_id)
-    # Далее обработка сообщений будет идти через callback или phone
 
 # ========================
 # Обработка меню
@@ -90,27 +89,47 @@ def handle_menu(call):
     elif call.data == "measure":
         bot.send_message(user_id, "Выберите удобный день для замера:", reply_markup=build_calendar())
     elif call.data.startswith("day_"):
-        date = call.data[4:]
-        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        btn = KeyboardButton("Отправить номер телефона", request_contact=True)
-        markup.add(btn)
-        user_state[user_id] = f"phone_for_measure_{date}"
-        bot.send_message(user_id,
-                         f"Вы выбрали день: *{date}*\nОставьте номер телефона для записи на замер:",
-                         parse_mode="Markdown",
-                         reply_markup=markup)
+        handle_day_selection(call)
 
 # ========================
 # Календарь на месяц (русский)
 # ========================
 def build_calendar():
-    markup = InlineKeyboardMarkup()
+    markup = InlineKeyboardMarkup(row_width=7)  # 7 кнопок в строке
     today = datetime.date.today()
+    buttons = []
     for i in range(30):
         day = today + datetime.timedelta(days=i)
         label = day.strftime("%a, %d %b")  # Пн, 01 Ноя
-        markup.add(InlineKeyboardButton(label, callback_data=f"day_{day}"))
+        callback = f"day_{day.isoformat()}"  # без пробелов
+        buttons.append(InlineKeyboardButton(label, callback_data=callback))
+    markup.add(*buttons)
     return markup
+
+# ========================
+# Обработка выбора даты
+# ========================
+def handle_day_selection(call):
+    bot.answer_callback_query(call.id)
+    user_id = call.message.chat.id
+    date_iso = call.data[4:]  # yyyy-mm-dd
+    date_obj = datetime.date.fromisoformat(date_iso)
+    formatted_date = date_obj.strftime("%A, %d %B")  # полное название дня на русском
+
+    # Кнопка для отправки номера телефона
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    btn = KeyboardButton("Отправить номер телефона", request_contact=True)
+    markup.add(btn)
+
+    # Сохраняем состояние пользователя
+    user_state[user_id] = f"phone_for_measure_{date_iso}"
+
+    bot.send_message(
+        user_id,
+        f"Вы выбрали день: *{formatted_date}*\nОставьте номер телефона для записи на замер:",
+        parse_mode="Markdown",
+        reply_markup=markup
+    )
 
 # ========================
 # Обработка сообщений
@@ -134,7 +153,7 @@ def process_messages(msg):
 
     step = user_state[user_id]
 
-    if step < len(questions):
+    if isinstance(step, int) and step < len(questions):
         user_answers[user_id].append(msg.text)
         user_state[user_id] += 1
         if user_state[user_id] < len(questions):
@@ -147,22 +166,23 @@ def process_messages(msg):
         return
 
     # Отправка заявки
-    phone = msg.contact.phone_number if msg.contact else msg.text
-    info = user_answers[user_id]
-    txt = (
-        "🔔 *Новая заявка!*\n\n"
-        f"1. Мебель: {info[0]}\n"
-        f"2. Стиль: {info[1]}\n"
-        f"3. Материал: {info[2]}\n"
-        f"4. Особенности: {info[3]}\n"
-        f"5. Сроки: {info[4]}\n"
-        f"📱 Телефон: {phone}"
-    )
-    bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
-    bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
+    if isinstance(step, int) and step == len(questions):
+        phone = msg.contact.phone_number if msg.contact else msg.text
+        info = user_answers[user_id]
+        txt = (
+            "🔔 *Новая заявка!*\n\n"
+            f"1. Мебель: {info[0]}\n"
+            f"2. Стиль: {info[1]}\n"
+            f"3. Материал: {info[2]}\n"
+            f"4. Особенности: {info[3]}\n"
+            f"5. Сроки: {info[4]}\n"
+            f"📱 Телефон: {phone}"
+        )
+        bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
+        bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
 
-    user_state.pop(user_id)
-    user_answers.pop(user_id)
+        user_state.pop(user_id)
+        user_answers.pop(user_id)
 
 # ========================
 # WEBHOOK
