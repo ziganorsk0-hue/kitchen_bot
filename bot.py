@@ -152,6 +152,10 @@ def process_messages(msg):
     user_id = msg.chat.id
     step = user_state.get(user_id)
 
+    if not step:
+        # Если пользователь ещё не начал заявку или замер — игнорируем текст
+        return
+
     # Запись на замер
     if isinstance(step, str) and step.startswith("phone_for_measure_"):
         date = step.replace("phone_for_measure_", "")
