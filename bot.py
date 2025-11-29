@@ -24,12 +24,22 @@ questions = [
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-# Хранение состояния пользователя
 user_state = {}
 user_answers = {}
 
 # ========================
-# Логирование всех сообщений
+# Команда /start
+# ========================
+@bot.message_handler(commands=['start'])
+def start(message):
+    user_id = message.chat.id
+    user_state[user_id] = 0
+    user_answers[user_id] = []
+    bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
+    bot.send_message(user_id, questions[0])
+
+# ========================
+# Лог всех сообщений
 # ========================
 @bot.message_handler(func=lambda msg: True)
 def log_all(msg):
@@ -39,42 +49,27 @@ def log_all(msg):
     print(f"User ID: {msg.from_user.id}")
     print(f"Text: {msg.text}")
     print("==================\n")
-
     if msg.chat.type == "private":
         process_private(msg)
-    else:
-        if msg.chat.type in ["group", "supergroup"]:
-            bot.send_message(msg.chat.id, "Группу вижу! Посмотрите ID в логах Render.")
+    elif msg.chat.type in ["group", "supergroup"]:
+        bot.send_message(msg.chat.id, "Группу вижу! Посмотрите ID в логах Render.")
 
 # ========================
 # Логика для лички
 # ========================
 def process_private(message):
     user_id = message.chat.id
-
-    # Команда /start
-    if message.text == "/start":
-        user_state[user_id] = 0
-        user_answers[user_id] = []
-        bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
-        bot.send_message(user_id, questions[0])
-        return
-
     if user_id not in user_state:
         bot.send_message(user_id, "Нажмите /start, чтобы начать.")
         return
 
     step = user_state[user_id]
-
-    # Пока есть вопросы
     if step < len(questions):
         user_answers[user_id].append(message.text)
         user_state[user_id] += 1
-
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
         else:
-            # Кнопка для контакта
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
@@ -83,9 +78,8 @@ def process_private(message):
 
     # Получаем телефон
     phone = message.contact.phone_number if message.contact else message.text
-
-    # Формируем заявку
     info = user_answers[user_id]
+
     text = (
         "🔔 *Новая заявка!* \n\n"
         f"1. Мебель: {info[0]}\n"
@@ -96,31 +90,42 @@ def process_private(message):
         f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
     )
 
-    # Отправка админу
     if ADMIN_ID != 0:
         bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
 
     bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
                      reply_markup=telebot.types.ReplyKeyboardRemove())
 
-    # Чистим состояние
     user_state.pop(user_id)
     user_answers.pop(user_id)
 
 # ========================
 # Webhook для Render
 # ========================
-WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+if not RENDER_URL:
+    raise ValueError("Ошибка: RENDER_EXTERNAL_URL не задана!")
 
+WEBHOOK_URL = f"https://{RENDER_URL}/{TOKEN}"
+
+# Удаляем старый webhook и ставим новый
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL)
 
+# ========================
+# Flask маршруты
+# ========================
 @app.route(f"/{TOKEN}", methods=['POST'])
 def receive_update():
     json_str = request.get_data().decode("utf-8")
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "OK", 200
+
+# Дополнительно GET для проверки в браузере
+@app.route(f"/{TOKEN}", methods=['GET'])
+def test_webhook():
+    return "Webhook OK", 200
 
 @app.route("/")
 def index():
