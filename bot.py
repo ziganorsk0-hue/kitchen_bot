@@ -90,18 +90,27 @@ def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
 # ========================
-# Календарь 30 дней на русском
+# Календарь 30 дней с красивой разбивкой по неделям
 # ========================
 def build_calendar():
     markup = InlineKeyboardMarkup(row_width=7)
     today = datetime.date.today()
-    buttons = []
-    for i in range(30):
-        day = today + datetime.timedelta(days=i)
+    
+    days = [today + datetime.timedelta(days=i) for i in range(30)]
+    week_buttons = []
+    
+    for i, day in enumerate(days, start=1):
         label = format_date_ru(day)
         callback = f"day_{day.isoformat()}"
-        buttons.append(InlineKeyboardButton(label, callback_data=callback))
-    markup.add(*buttons)
+        week_buttons.append(InlineKeyboardButton(label, callback_data=callback))
+
+        if i % 7 == 0:
+            markup.row(*week_buttons)
+            week_buttons = []
+
+    if week_buttons:
+        markup.row(*week_buttons)
+
     return markup
 
 # ========================
