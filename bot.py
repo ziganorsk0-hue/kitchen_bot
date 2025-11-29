@@ -38,7 +38,7 @@ questions = [
 ]
 
 # ========================
-# М И Н И  -  М Е Н Ю
+# М И Н И - М Е Н Ю
 # ========================
 def get_main_menu():
     markup = InlineKeyboardMarkup()
@@ -48,21 +48,17 @@ def get_main_menu():
     return markup
 
 # ========================
-# Автоприветствие
+# Автоприветствие для любого первого сообщения
 # ========================
-@bot.my_chat_member_handler(func=lambda msg: True)
-def auto_start(msg):
-    if msg.new_chat_member.status == "member" or msg.new_chat_member.status == "administrator":
-        user_id = msg.from_user.id
+@bot.message_handler(func=lambda msg: True)
+def catch_all(msg):
+    user_id = msg.chat.id
+    # Если пользователь новый или state отсутствует
+    if user_id not in user_state:
         bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
-
-# ========================
-# /start
-# ========================
-@bot.message_handler(commands=['start'])
-def start(message):
-    user_id = message.chat.id
-    bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
+        return
+    # Иначе продолжаем обработку сообщений
+    process(msg)
 
 # ========================
 # Обработка меню
@@ -80,48 +76,34 @@ def about(call):
 def start_request(call):
     user_id = call.message.chat.id
     bot.answer_callback_query(call.id)
-
     user_state[user_id] = 0
     user_answers[user_id] = []
-
     bot.send_message(user_id, "📝 Давайте оформим заявку.")
     bot.send_message(user_id, questions[0])
 
 # ========================
-# Календарь на весь месяц с месяцем и днями недели
+# Календарь на текущий месяц
 # ========================
 def build_calendar():
     markup = InlineKeyboardMarkup()
     today = datetime.date.today()
-    year = today.year
-    month = today.month
+    year, month = today.year, today.month
     month_name = calendar.month_name[month]
-
-    # Заголовок с месяцем
-    markup.add(InlineKeyboardButton(f"{month_name} {year}", callback_data="ignore"))
-
-    # Заголовки дней недели
-    week_days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    week_row = [InlineKeyboardButton(day, callback_data="ignore") for day in week_days]
-    markup.add(*week_row)
+    # Заголовок
+    markup.add(InlineKeyboardButton(f"📅 {month_name} {year}", callback_data="ignore"))
 
     # Дни месяца
-    month_calendar = calendar.monthcalendar(year, month)
-    for week in month_calendar:
-        row = []
-        for day in week:
-            if day == 0:
-                row.append(InlineKeyboardButton(" ", callback_data="ignore"))
-            else:
-                day_date = datetime.date(year, month, day)
-                row.append(InlineKeyboardButton(str(day), callback_data=f"day_{day_date}"))
-        markup.add(*row)
+    num_days = calendar.monthrange(year, month)[1]
+    for day in range(1, num_days + 1):
+        date_obj = datetime.date(year, month, day)
+        label = date_obj.strftime("%a %d")
+        markup.add(InlineKeyboardButton(label, callback_data=f"day_{date_obj}"))
     return markup
 
 @bot.callback_query_handler(func=lambda call: call.data == "measure")
 def measure(call):
     bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, "Выберите удобный день для замера:", reply_markup=build_calendar())
+    bot.send_message(call.message.chat.id, "Выберите удобный день:", reply_markup=build_calendar())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("day_"))
 def choose_day(call):
@@ -159,7 +141,6 @@ def process(msg):
         return
 
     step = user_state[user_id]
-
     if step < len(questions):
         user_answers[user_id].append(msg.text)
         user_state[user_id] += 1
@@ -175,7 +156,6 @@ def process(msg):
     # Отправка заявки
     phone = msg.contact.phone_number if msg.contact else msg.text
     info = user_answers[user_id]
-
     txt = (
         "🔔 *Новая заявка!*\n\n"
         f"1. Мебель: {info[0]}\n"
@@ -185,10 +165,8 @@ def process(msg):
         f"5. Сроки: {info[4]}\n"
         f"📱 Телефон: {phone}"
     )
-
     bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
     bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
-
     user_state.pop(user_id)
     user_answers.pop(user_id)
 
