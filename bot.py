@@ -7,7 +7,8 @@ import telebot
 # ========================
 TOKEN = os.getenv("8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8")  # токен бота
 ADMIN_ID = int(os.getenv("-1003493427992", "0"))  # ID администратора
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # публичный домен Render
+RENDER_URL = os.getenv(") https://kitchen-bot-ou9m.onrender.com/123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+ # публичный домен Render
 
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN не задан!")
