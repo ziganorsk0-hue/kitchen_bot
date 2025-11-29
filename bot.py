@@ -92,7 +92,8 @@ def handle_menu(call):
                          "Реализую проекты по вашим размерам и пожеланиям.\n"
                          "Оставляйте заявку — я свяжусь с вами для уточнения всех деталей. 🚀")
     elif call.data == "start_request":
-        user_state[user_id] = 0
+        # Начало заявки
+        user_state[user_id] = {"step": 0, "type": "request"}
         user_answers[user_id] = []
         bot.send_message(user_id, "📝 Давайте оформим заявку.")
         bot.send_message(user_id, questions[0])
@@ -136,7 +137,7 @@ def handle_day_selection(call):
     btn = KeyboardButton("Отправить номер телефона", request_contact=True)
     markup.add(btn)
 
-    user_state[user_id] = f"phone_for_measure_{date_iso}"
+    user_state[user_id] = {"type": "measure", "date": date_iso}
 
     bot.send_message(
         user_id,
@@ -151,38 +152,41 @@ def handle_day_selection(call):
 @bot.message_handler(content_types=["text", "contact"])
 def process_messages(msg):
     user_id = msg.chat.id
-    step = user_state.get(user_id)
+    state = user_state.get(user_id)
 
-    if step is None:
-        return  # пользователь ещё не начал заявку/замер
+    if not state:
+        return
 
-    # Запись на замер
-    if isinstance(step, str) and step.startswith("phone_for_measure_"):
-        date = step.replace("phone_for_measure_", "")
+    # --- Запись на замер ---
+    if isinstance(state, dict) and state.get("type") == "measure":
         phone = msg.contact.phone_number if msg.contact else msg.text
+        date = state["date"]
         bot.send_message(ADMIN_ID, f"📅 *Запись на замер*\nДата: {date}\nТелефон: {phone}", parse_mode="Markdown")
         bot.send_message(user_id, "Спасибо! Мы свяжемся с вами для подтверждения.", reply_markup=ReplyKeyboardRemove())
         user_state.pop(user_id, None)
         return
 
-    # Вопросы заявки
-    if isinstance(step, int):
+    # --- Заявка на мебель ---
+    if isinstance(state, dict) and state.get("type") == "request":
+        step = state["step"]
         user_answers.setdefault(user_id, []).append(msg.text)
         next_step = step + 1
+
         if next_step < len(questions):
-            user_state[user_id] = next_step
+            # Отправляем следующий вопрос
+            user_state[user_id]["step"] = next_step
             bot.send_message(user_id, questions[next_step])
         else:
             # Последний вопрос -> просим телефон
-            user_state[user_id] = "phone_for_request"
+            user_state[user_id]["type"] = "phone_for_request"
             markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
             bot.send_message(user_id, "Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
-    # Телефон для заявки
-    if step == "phone_for_request":
+    # --- Телефон для заявки ---
+    if isinstance(state, dict) and state.get("type") == "phone_for_request":
         phone = msg.contact.phone_number if msg.contact else msg.text
         info = user_answers.get(user_id, [])
         txt = (
