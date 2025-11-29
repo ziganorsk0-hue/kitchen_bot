@@ -15,7 +15,7 @@ if not TOKEN or not ADMIN_ID or not RENDER_URL:
     sys.exit(1)
 
 ADMIN_ID = int(ADMIN_ID)
-WEBHOOK_URL = f"//{RENDER_URL}/{TOKEN}"
+WEBHOOK_URL = f"{RENDER_URL}/{TOKEN}"
 print(f"✅ WEBHOOK_URL: {WEBHOOK_URL}")
 
 bot = telebot.TeleBot(TOKEN)
