@@ -5,8 +5,8 @@ import telebot
 # ========================
 # Настройки
 # ========================
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # токен бота
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # ID администратора
+TOKEN = os.getenv("8459688522:AAGWJLK3uEs2cqmXsOrUz0oIaGGK1beqtw8")  # токен бота
+ADMIN_ID = int(os.getenv("-1003493427992", "0"))  # ID администратора
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # публичный домен Render
 
 if not TOKEN:
