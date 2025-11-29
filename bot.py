@@ -49,6 +49,7 @@ def log_all(msg):
     print(f"User ID: {msg.from_user.id}")
     print(f"Text: {msg.text}")
     print("==================\n")
+
     if msg.chat.type == "private":
         process_private(msg)
     elif msg.chat.type in ["group", "supergroup"]:
@@ -59,6 +60,13 @@ def log_all(msg):
 # ========================
 def process_private(message):
     user_id = message.chat.id
+    if message.text == "/start" and user_id not in user_state:
+        user_state[user_id] = 0
+        user_answers[user_id] = []
+        bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
+        bot.send_message(user_id, questions[0])
+        return
+
     if user_id not in user_state:
         bot.send_message(user_id, "Нажмите /start, чтобы начать.")
         return
@@ -67,9 +75,11 @@ def process_private(message):
     if step < len(questions):
         user_answers[user_id].append(message.text)
         user_state[user_id] += 1
+
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
         else:
+            # Кнопка для телефона
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
@@ -108,7 +118,6 @@ if not RENDER_URL:
 
 WEBHOOK_URL = f"https://{RENDER_URL}/{TOKEN}"
 
-# Удаляем старый webhook и ставим новый
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL)
 
@@ -122,7 +131,7 @@ def receive_update():
     bot.process_new_updates([update])
     return "OK", 200
 
-# Дополнительно GET для проверки в браузере
+# GET маршрут для проверки в браузере
 @app.route(f"/{TOKEN}", methods=['GET'])
 def test_webhook():
     return "Webhook OK", 200
