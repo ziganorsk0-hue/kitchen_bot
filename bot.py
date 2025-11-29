@@ -4,6 +4,7 @@ from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 import datetime
+import calendar
 
 # ========================
 # Переменные окружения
@@ -24,11 +25,17 @@ app = Flask(__name__)
 
 user_state = {}
 users_started = set()
+calendar_page = {}  # хранение текущего месяца для каждого пользователя
 
 # ========================
-# Русские дни недели
+# Русские дни недели и месяцы
 # ========================
 RU_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+RU_MONTHS = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
+    5: "Май", 6: "Июнь", 7: "Июль", 8: "Август",
+    9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь"
+}
 
 # ========================
 # Главное меню
@@ -68,9 +75,17 @@ def handle_menu(call):
                          "Реализую проекты по вашим размерам и пожеланиям.\n"
                          "Свяжитесь со мной через запись на замер. 🚀")
     elif call.data == "measure":
-        bot.send_message(user_id, "Выберите удобный день для замера:", reply_markup=build_calendar())
+        # Устанавливаем текущий месяц
+        today = datetime.date.today()
+        calendar_page[user_id] = (today.year, today.month)
+        bot.send_message(user_id, f"Выберите день для замера:", reply_markup=build_calendar(user_id))
     elif call.data.startswith("day_"):
         handle_day_selection(call)
+    elif call.data.startswith("month_"):
+        action, year, month = call.data.split("_")
+        calendar_page[user_id] = (int(year), int(month))
+        bot.edit_message_reply_markup(chat_id=user_id, message_id=call.message.message_id,
+                                      reply_markup=build_calendar(user_id))
 
 # ========================
 # Главное меню после нажатия "Начать"
@@ -79,27 +94,56 @@ def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
 # ========================
-# Календарь 30 дней: день недели + число
+# Календарь для замера
 # ========================
-def build_calendar():
+def build_calendar(user_id):
+    year, month = calendar_page[user_id]
     markup = InlineKeyboardMarkup(row_width=7)
-    today = datetime.date.today()
-    
-    days = [today + datetime.timedelta(days=i) for i in range(30)]
-    week_buttons = []
-    
-    for i, day in enumerate(days, start=1):
-        day_of_week = RU_DAYS[day.weekday()]       # Пн, Вт и т.д.
-        label = f"{day_of_week} {day.day}"         # Пн 29, Вт 30 ...
-        callback = f"day_{day.isoformat()}"
-        week_buttons.append(InlineKeyboardButton(label, callback_data=callback))
 
-        if i % 7 == 0:
+    # Заголовок месяца
+    header = InlineKeyboardButton(f"{RU_MONTHS[month]} {year}", callback_data="ignore")
+    markup.add(header)
+
+    # Кнопки дней недели
+    for day_name in RU_DAYS:
+        markup.add(InlineKeyboardButton(day_name, callback_data="ignore"))
+
+    # Дни месяца
+    month_calendar = calendar.Calendar(firstweekday=0).itermonthdays(year, month)
+    week_buttons = []
+    for day in month_calendar:
+        if day == 0:
+            week_buttons.append(InlineKeyboardButton(" ", callback_data="ignore"))
+        else:
+            day_obj = datetime.date(year, month, day)
+            day_of_week = RU_DAYS[day_obj.weekday()]
+            label = f"{day_of_week} {day}"
+            callback = f"day_{day_obj.isoformat()}"
+            week_buttons.append(InlineKeyboardButton(label, callback_data=callback))
+
+        if len(week_buttons) == 7:
             markup.row(*week_buttons)
             week_buttons = []
 
     if week_buttons:
         markup.row(*week_buttons)
+
+    # Кнопки листания месяца
+    prev_month = month - 1
+    prev_year = year
+    if prev_month == 0:
+        prev_month = 12
+        prev_year -= 1
+    next_month = month + 1
+    next_year = year
+    if next_month == 13:
+        next_month = 1
+        next_year += 1
+
+    markup.row(
+        InlineKeyboardButton("◀️ Назад", callback_data=f"month_{prev_year}_{prev_month}"),
+        InlineKeyboardButton("▶️ Вперед", callback_data=f"month_{next_year}_{next_month}")
+    )
 
     return markup
 
