@@ -7,12 +7,9 @@ import datetime
 import locale
 
 # ========================
-# Устанавливаем русскую локаль для дат
+# Русская локализация для дат
 # ========================
-try:
-    locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
-except:
-    locale.setlocale(locale.LC_TIME, 'ru_RU')  # для Windows
+locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
 # ========================
 # Переменные окружения
@@ -46,7 +43,7 @@ questions = [
 ]
 
 # ========================
-# М И Н И - М Е Н Ю
+# М И Н И  -  М Е Н Ю
 # ========================
 def get_main_menu():
     markup = InlineKeyboardMarkup()
@@ -56,95 +53,70 @@ def get_main_menu():
     return markup
 
 # ========================
-# Приветствие
+# /start и приветствие
 # ========================
-def send_greeting(user_id, repeat=False):
-    if repeat:
-        text = "С возвращением! 👋 Рады видеть вас снова.\nВыберите действие:"
-    else:
-        text = "Здравствуйте! 👋 Я Павел — ваш персональный мастер по корпусной мебели.\nВыберите действие:"
-    bot.send_message(user_id, text, reply_markup=get_main_menu())
+def greet_user(user_id):
+    bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
 # ========================
-# /start
+# Автозапуск при входе
 # ========================
-@bot.message_handler(commands=['start'])
-def start(message):
+@bot.message_handler(func=lambda message: True)
+def greet_first(message):
     user_id = message.chat.id
-    send_greeting(user_id)
-
-# ========================
-# Обработчик любых сообщений (чтобы бот отвечал сразу)
-# ========================
-@bot.message_handler(func=lambda msg: True)
-def catch_all(msg):
-    user_id = msg.chat.id
     if user_id not in user_state:
-        send_greeting(user_id, repeat=True)
-    else:
-        process(msg)
+        greet_user(user_id)
+    # Далее обработка сообщений будет идти через callback или phone
 
 # ========================
-# О компании
+# Обработка меню
 # ========================
-@bot.callback_query_handler(func=lambda call: call.data == "about")
-def about(call):
+@bot.callback_query_handler(func=lambda call: True)
+def handle_menu(call):
     bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id,
-                     "Я частный мастер, зовут меня Павел.\n"
-                     "Изготавливаю корпусную мебель с 2006 года.\n"
-                     "Реализую проекты по вашим размерам и пожеланиям.\n"
-                     "Оставляйте заявку, и я свяжусь с вами для уточнения деталей. 🚀")
-
-# ========================
-# Начало заявки
-# ========================
-@bot.callback_query_handler(func=lambda call: call.data == "start_request")
-def start_request(call):
     user_id = call.message.chat.id
-    bot.answer_callback_query(call.id)
-    user_state[user_id] = 0
-    user_answers[user_id] = []
-    bot.send_message(user_id, "📝 Давайте оформим заявку.")
-    bot.send_message(user_id, questions[0])
+
+    if call.data == "about":
+        bot.send_message(user_id,
+                         "Я частный мастер, Павел.\n"
+                         "Изготавливаю корпусную мебель на заказ с 2006 года.\n"
+                         "Реализую проекты по вашим размерам и пожеланиям.\n"
+                         "Оставляйте заявку — я свяжусь с вами для уточнения всех деталей. 🚀")
+    elif call.data == "start_request":
+        user_state[user_id] = 0
+        user_answers[user_id] = []
+        bot.send_message(user_id, "📝 Давайте оформим заявку.")
+        bot.send_message(user_id, questions[0])
+    elif call.data == "measure":
+        bot.send_message(user_id, "Выберите удобный день для замера:", reply_markup=build_calendar())
+    elif call.data.startswith("day_"):
+        date = call.data[4:]
+        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        btn = KeyboardButton("Отправить номер телефона", request_contact=True)
+        markup.add(btn)
+        user_state[user_id] = f"phone_for_measure_{date}"
+        bot.send_message(user_id,
+                         f"Вы выбрали день: *{date}*\nОставьте номер телефона для записи на замер:",
+                         parse_mode="Markdown",
+                         reply_markup=markup)
 
 # ========================
-# Календарь на месяц
+# Календарь на месяц (русский)
 # ========================
 def build_calendar():
     markup = InlineKeyboardMarkup()
     today = datetime.date.today()
     for i in range(30):
         day = today + datetime.timedelta(days=i)
-        label = day.strftime("%a, %d %b")  # Пн, 29 ноя
+        label = day.strftime("%a, %d %b")  # Пн, 01 Ноя
         markup.add(InlineKeyboardButton(label, callback_data=f"day_{day}"))
     return markup
-
-@bot.callback_query_handler(func=lambda call: call.data == "measure")
-def measure(call):
-    bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, "Выберите удобный день:", reply_markup=build_calendar())
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("day_"))
-def choose_day(call):
-    bot.answer_callback_query(call.id)
-    date = call.data[4:]
-
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    btn = KeyboardButton("Отправить номер телефона", request_contact=True)
-    markup.add(btn)
-
-    user_state[call.message.chat.id] = f"phone_for_measure_{date}"
-    bot.send_message(call.message.chat.id,
-                     f"Вы выбрали день: *{date}*\nОставьте номер телефона для записи на замер:",
-                     parse_mode="Markdown",
-                     reply_markup=markup)
 
 # ========================
 # Обработка сообщений
 # ========================
-@bot.message_handler(func=lambda msg: True, content_types=["text", "contact"])
-def process(msg):
+@bot.message_handler(content_types=["text", "contact"])
+def process_messages(msg):
     user_id = msg.chat.id
 
     # Запись на замер
@@ -161,6 +133,7 @@ def process(msg):
         return
 
     step = user_state[user_id]
+
     if step < len(questions):
         user_answers[user_id].append(msg.text)
         user_state[user_id] += 1
@@ -176,7 +149,6 @@ def process(msg):
     # Отправка заявки
     phone = msg.contact.phone_number if msg.contact else msg.text
     info = user_answers[user_id]
-
     txt = (
         "🔔 *Новая заявка!*\n\n"
         f"1. Мебель: {info[0]}\n"
@@ -186,7 +158,6 @@ def process(msg):
         f"5. Сроки: {info[4]}\n"
         f"📱 Телефон: {phone}"
     )
-
     bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
     bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
 
