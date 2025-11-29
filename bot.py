@@ -63,15 +63,14 @@ def get_main_menu():
     return markup
 
 # ========================
-# Приветствие при первом запуске
+# Приветствие при /start
 # ========================
-@bot.message_handler(func=lambda message: True)
-def greet_first(message):
+@bot.message_handler(commands=["start"])
+def start_command(message):
     user_id = message.chat.id
-    if user_id not in user_state:
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
-        bot.send_message(user_id, "Привет! Нажми кнопку чтобы начать:", reply_markup=markup)
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
+    bot.send_message(user_id, "Привет! Нажми кнопку чтобы начать:", reply_markup=markup)
 
 # ========================
 # Обработка меню и кнопок
@@ -83,7 +82,6 @@ def handle_menu(call):
 
     if call.data == "start":
         greet_user(user_id)
-
     elif call.data == "about":
         bot.send_message(user_id,
                          "Я частный мастер, Павел.\n"
@@ -101,7 +99,7 @@ def handle_menu(call):
         handle_day_selection(call)
 
 # ========================
-# Приветствие пользователя (главное меню)
+# Главное меню (после нажатия "Начать")
 # ========================
 def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
@@ -122,7 +120,7 @@ def build_calendar():
     return markup
 
 # ========================
-# Обработка выбора даты для замера
+# Выбор даты замера
 # ========================
 def handle_day_selection(call):
     bot.answer_callback_query(call.id)
@@ -145,15 +143,15 @@ def handle_day_selection(call):
     )
 
 # ========================
-# Обработка сообщений
+# Обработка сообщений для заявки и замера
 # ========================
 @bot.message_handler(content_types=["text", "contact"])
 def process_messages(msg):
     user_id = msg.chat.id
     step = user_state.get(user_id)
 
-    if not step:
-        # Если пользователь ещё не начал заявку или замер — игнорируем текст
+    if step is None:
+        # Игнорируем все сообщения, пока пользователь не выбрал меню
         return
 
     # Запись на замер
