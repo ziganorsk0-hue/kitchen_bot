@@ -86,6 +86,8 @@ def handle_menu(call):
         calendar_page[user_id] = (int(year), int(month))
         bot.edit_message_reply_markup(chat_id=user_id, message_id=call.message.message_id,
                                       reply_markup=build_calendar(user_id))
+    elif call.data == "ignore":
+        pass  # Для кнопок-заголовков
 
 # ========================
 # Главное меню после нажатия "Начать"
@@ -94,32 +96,29 @@ def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
 # ========================
-# Календарь для замера
+# Построение календаря
 # ========================
 def build_calendar(user_id):
     year, month = calendar_page[user_id]
-    markup = InlineKeyboardMarkup(row_width=7)
+    markup = InlineKeyboardMarkup()
 
-    # Заголовок месяца
-    header = InlineKeyboardButton(f"{RU_MONTHS[month]} {year}", callback_data="ignore")
-    markup.add(header)
+    # Название месяца
+    markup.add(InlineKeyboardButton(f"{RU_MONTHS[month]} {year}", callback_data="ignore"))
 
-    # Кнопки дней недели
-    for day_name in RU_DAYS:
-        markup.add(InlineKeyboardButton(day_name, callback_data="ignore"))
+    # Дни недели как заголовок
+    header_buttons = [InlineKeyboardButton(day, callback_data="ignore") for day in RU_DAYS]
+    markup.row(*header_buttons)
 
     # Дни месяца
     month_calendar = calendar.Calendar(firstweekday=0).itermonthdays(year, month)
     week_buttons = []
-    for day in month_calendar:
+    for i, day in enumerate(month_calendar):
         if day == 0:
             week_buttons.append(InlineKeyboardButton(" ", callback_data="ignore"))
         else:
             day_obj = datetime.date(year, month, day)
-            day_of_week = RU_DAYS[day_obj.weekday()]
-            label = f"{day_of_week} {day}"
             callback = f"day_{day_obj.isoformat()}"
-            week_buttons.append(InlineKeyboardButton(label, callback_data=callback))
+            week_buttons.append(InlineKeyboardButton(str(day), callback_data=callback))
 
         if len(week_buttons) == 7:
             markup.row(*week_buttons)
