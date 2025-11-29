@@ -6,9 +6,9 @@ import sys
 # ========================
 # Переменные окружения
 # ========================
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+TOKEN = os.getenv("TELEGRAM_TOKEN")  # токен бота
+ADMIN_ID = os.getenv("ADMIN_ID")     # твой Telegram ID числом
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # только домен, без https://
 
 # Проверка переменных
 if not TOKEN:
@@ -29,7 +29,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 # ========================
-# Вопросы
+# Вопросы для пользователя
 # ========================
 questions = [
     "1️⃣ Какую мебель планируете заказать?",
@@ -70,7 +70,7 @@ def log_all(msg):
         bot.send_message(msg.chat.id, "Группу вижу! Посмотрите ID в логах Render.")
 
 # ========================
-# Логика лички
+# Логика личных сообщений
 # ========================
 def process_private(message):
     user_id = message.chat.id
