@@ -1,9 +1,9 @@
-import os
 import sys
 from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 import datetime
+import os
 
 # ========================
 # Переменные окружения
@@ -24,14 +24,6 @@ app = Flask(__name__)
 
 user_state = {}
 user_answers = {}
-
-# ========================
-# Вопросы для заявки
-# ========================
-questions = [
-    "1️⃣ Какую мебель планируете заказать?",
-    "2️⃣ В каком стиле хотите?"
-]
 
 # ========================
 # Мини-меню
@@ -57,84 +49,113 @@ def start(message):
 @bot.callback_query_handler(func=lambda call: call.data == "about")
 def about(call):
     bot.answer_callback_query(call.id)
-    bot.send_message(
-        call.message.chat.id,
-        "👋 Привет! Я Павел — частный мастер по изготовлению корпусной мебели с 2006 года.\n\n"
-        "🛠️ Моя цель — воплотить в жизнь любой проект по вашим размерам и пожеланиям.\n\n"
-        "📌 Я работаю индивидуально с каждым клиентом, поэтому каждая мебель уникальна.\n\n"
-        "✏️ Оставьте заявку, и я свяжусь с вами, чтобы обсудить детали и предложить лучшие решения для вашего интерьера.\n\n"
-        "🚀 Давайте создадим мебель вашей мечты вместе!",
-        parse_mode="Markdown"
+    text = (
+        "Я частный мастер, меня зовут Павел. 👋\n"
+        "Занимаюсь изготовлением корпусной мебели с 2006 года.\n"
+        "Реализую любые проекты по вашим размерам и пожеланиям.\n"
+        "Оставляйте заявку, и я свяжусь с вами, чтобы обсудить детали."
     )
+    bot.send_message(call.message.chat.id, text)
 
 # ========================
-# Начало заявки
+# Вопросы для заявки
 # ========================
-@bot.callback_query_handler(func=lambda call: call.data == "start_request")
-def start_request(call):
-    user_id = call.message.chat.id
-    bot.answer_callback_query(call.id)
-    user_state[user_id] = 0
-    user_answers[user_id] = []
-    bot.send_message(user_id, "📝 Давайте оформим заявку.")
-    bot.send_message(user_id, questions[0])
+questions = [
+    "1️⃣ Какую мебель планируете заказать?",
+    "2️⃣ В каком стиле хотите?"
+]
 
 # ========================
-# Календарь для замера
+# Календарь с навигацией
 # ========================
-def build_calendar():
-    markup = InlineKeyboardMarkup()
-    today = datetime.date.today()
-    for i in range(7):
-        day = today + datetime.timedelta(days=i)
-        label = day.strftime("%d.%m (%a)")
-        markup.add(InlineKeyboardButton(label, callback_data=f"day_{day}"))
+def build_calendar(start_date=None, weeks=2):
+    if start_date is None:
+        start_date = datetime.date.today()
+    markup = InlineKeyboardMarkup(row_width=7)
+    weekdays = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"]
+    for wd in weekdays:
+        markup.add(InlineKeyboardButton(wd, callback_data="ignore"))
+
+    start_week = start_date - datetime.timedelta(days=start_date.weekday())
+    for week in range(weeks):
+        for day_offset in range(7):
+            day = start_week + datetime.timedelta(days=week*7 + day_offset)
+            label = str(day.day)
+            markup.add(InlineKeyboardButton(label, callback_data=f"day_{day}"))
+
+    # Навигация
+    prev_week = start_week - datetime.timedelta(weeks=weeks)
+    next_week = start_week + datetime.timedelta(weeks=weeks)
+    markup.add(
+        InlineKeyboardButton("⬅️ Назад", callback_data=f"cal_{prev_week}"),
+        InlineKeyboardButton("➡️ Вперед", callback_data=f"cal_{next_week}")
+    )
     return markup
 
+# ========================
+# Обработка кнопки "Записаться на замер"
+# ========================
 @bot.callback_query_handler(func=lambda call: call.data == "measure")
 def measure(call):
     bot.answer_callback_query(call.id)
     bot.send_message(call.message.chat.id, "Выберите удобный день:", reply_markup=build_calendar())
 
+# Обработка листания календаря
+@bot.callback_query_handler(func=lambda call: call.data.startswith("cal_"))
+def calendar_navigation(call):
+    bot.answer_callback_query(call.id)
+    date_str = call.data[4:]
+    date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+    bot.send_message(call.message.chat.id, "Выберите день:", reply_markup=build_calendar(start_date=date_obj))
+
+# Выбор конкретного дня
 @bot.callback_query_handler(func=lambda call: call.data.startswith("day_"))
 def choose_day(call):
     bot.answer_callback_query(call.id)
     date = call.data[4:]
-    bot.send_message(call.message.chat.id, f"Вы выбрали день: *{date}*\nТеперь оставьте телефон.", parse_mode="Markdown")
+    user_state[call.message.chat.id] = {"action":"measure", "day": date}
 
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     btn = KeyboardButton("Отправить номер телефона", request_contact=True)
     markup.add(btn)
-
-    user_state[call.message.chat.id] = "phone_for_measure"
-    bot.send_message(call.message.chat.id, "Нажмите кнопку ниже:", reply_markup=markup)
+    bot.send_message(call.message.chat.id, f"Вы выбрали {date}. Теперь оставьте телефон:", reply_markup=markup)
 
 # ========================
-# Обработка сообщений и контактов
+# Обработка заявки и записи
 # ========================
-@bot.message_handler(func=lambda msg: True, content_types=["text", "contact"])
+@bot.callback_query_handler(func=lambda call: call.data == "start_request")
+def start_request(call):
+    user_id = call.message.chat.id
+    bot.answer_callback_query(call.id)
+    user_state[user_id] = {"action":"request", "step":0, "answers":[]}
+    bot.send_message(user_id, "📝 Давайте оформим заявку.")
+    bot.send_message(user_id, questions[0])
+
+@bot.message_handler(func=lambda msg: True, content_types=["text","contact"])
 def process(msg):
     user_id = msg.chat.id
 
-    # Запись на замер
-    if user_state.get(user_id) == "phone_for_measure":
+    if user_id not in user_state:
+        return
+
+    state = user_state[user_id]
+
+    # === Запись на замер ===
+    if state.get("action")=="measure":
         phone = msg.contact.phone_number if msg.contact else msg.text
-        bot.send_message(ADMIN_ID, f"📅 *Запись на замер*\nТелефон: {phone}", parse_mode="Markdown")
+        bot.send_message(ADMIN_ID, f"📅 *Запись на замер*\nДата: {state['day']}\nТелефон: {phone}", parse_mode="Markdown")
         bot.send_message(user_id, "Спасибо! Мы свяжемся с вами.", reply_markup=ReplyKeyboardRemove())
         user_state.pop(user_id, None)
         return
 
-    # Заявка по вопросам
-    if user_id not in user_state:
-        return
+    # === Заявка на мебель ===
+    if state.get("action")=="request":
+        step = state["step"]
+        state["answers"].append(msg.text)
+        state["step"] += 1
 
-    step = user_state[user_id]
-    if step < len(questions):
-        user_answers[user_id].append(msg.text)
-        user_state[user_id] += 1
-
-        if user_state[user_id] < len(questions):
-            bot.send_message(user_id, questions[user_state[user_id]])
+        if step+1 < len(questions):
+            bot.send_message(user_id, questions[step+1])
         else:
             markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = KeyboardButton("Отправить номер телефона", request_contact=True)
@@ -142,9 +163,9 @@ def process(msg):
             bot.send_message(user_id, "Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
-    # Отправка заявки
+    # Отправка телефона
     phone = msg.contact.phone_number if msg.contact else msg.text
-    info = user_answers[user_id]
+    info = state["answers"]
     txt = (
         "🔔 *Новая заявка!*\n\n"
         f"1. Мебель: {info[0]}\n"
@@ -153,9 +174,7 @@ def process(msg):
     )
     bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
     bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
-
-    user_state.pop(user_id)
-    user_answers.pop(user_id)
+    user_state.pop(user_id, None)
 
 # ========================
 # Webhook
@@ -172,9 +191,6 @@ def webhook():
 def index():
     return "Bot is running", 200
 
-# ========================
-# Запуск Flask
-# ========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT",10000))
     app.run(host="0.0.0.0", port=port)
