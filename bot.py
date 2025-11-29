@@ -22,20 +22,8 @@ WEBHOOK_URL = f"{RENDER_URL}/{TOKEN}"
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-user_state = {}      # Хранит шаг заявки или состояние замера
-user_answers = {}    # Хранит ответы пользователей для заявки
-users_started = set()  # Пользователи, которым уже показана кнопка "Начать"
-
-# ========================
-# Вопросы для заявки
-# ========================
-questions = [
-    "1️⃣ Какую мебель планируете заказать?",
-    "2️⃣ В каком стиле хотите?",
-    "3️⃣ Какой материал предпочитаете?",
-    "4️⃣ Есть ли особые требования к размерам или конструкции?",
-    "5️⃣ Когда планируете начать проект / нужен замер?"
-]
+user_state = {}
+users_started = set()
 
 # ========================
 # Русские дни недели и месяцы
@@ -59,7 +47,6 @@ def format_date_ru(date_obj):
 def get_main_menu():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("📅 Записаться на замер", callback_data="measure"))
-    markup.add(InlineKeyboardButton("📝 Оставить заявку", callback_data="start_request"))
     markup.add(InlineKeyboardButton("ℹ️ О компании", callback_data="about"))
     return markup
 
@@ -69,7 +56,7 @@ def get_main_menu():
 @bot.message_handler(func=lambda message: True, content_types=["text"])
 def show_start_button(message):
     user_id = message.chat.id
-    if user_id not in user_state and user_id not in users_started:
+    if user_id not in users_started:
         users_started.add(user_id)
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
@@ -90,13 +77,7 @@ def handle_menu(call):
                          "Я частный мастер, Павел.\n"
                          "Изготавливаю корпусную мебель на заказ с 2006 года.\n"
                          "Реализую проекты по вашим размерам и пожеланиям.\n"
-                         "Оставляйте заявку — я свяжусь с вами для уточнения всех деталей. 🚀")
-    elif call.data == "start_request":
-        # Начало заявки
-        user_state[user_id] = 0
-        user_answers[user_id] = []
-        bot.send_message(user_id, "📝 Давайте оформим заявку.")
-        bot.send_message(user_id, questions[0])
+                         "Свяжитесь со мной через запись на замер. 🚀")
     elif call.data == "measure":
         bot.send_message(user_id, "Выберите удобный день для замера:", reply_markup=build_calendar())
     elif call.data.startswith("day_"):
@@ -147,60 +128,19 @@ def handle_day_selection(call):
     )
 
 # ========================
-# Обработка сообщений (вопросы и телефон)
+# Обработка сообщений для замера
 # ========================
 @bot.message_handler(content_types=["text", "contact"])
 def process_messages(msg):
     user_id = msg.chat.id
     state = user_state.get(user_id)
 
-    if state is None:
-        return
-
-    # --- Запись на замер ---
     if isinstance(state, dict) and state.get("type") == "measure":
         phone = msg.contact.phone_number if msg.contact else msg.text
         date = state["date"]
         bot.send_message(ADMIN_ID, f"📅 *Запись на замер*\nДата: {date}\nТелефон: {phone}", parse_mode="Markdown")
         bot.send_message(user_id, "Спасибо! Мы свяжемся с вами для подтверждения.", reply_markup=ReplyKeyboardRemove())
         user_state.pop(user_id, None)
-        return
-
-    # --- Заявка на мебель ---
-    if isinstance(state, int):
-        step = state
-        user_answers.setdefault(user_id, []).append(msg.text)
-        next_step = step + 1
-
-        if next_step < len(questions):
-            user_state[user_id] = next_step
-            bot.send_message(user_id, questions[next_step])
-        else:
-            # Последний вопрос -> просим телефон
-            user_state[user_id] = "phone_for_request"
-            markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-            btn = KeyboardButton("Отправить номер телефона", request_contact=True)
-            markup.add(btn)
-            bot.send_message(user_id, "Теперь оставьте номер телефона:", reply_markup=markup)
-        return
-
-    # --- Телефон для заявки ---
-    if state == "phone_for_request":
-        phone = msg.contact.phone_number if msg.contact else msg.text
-        info = user_answers.get(user_id, [])
-        txt = (
-            "🔔 *Новая заявка!*\n\n"
-            f"1. Мебель: {info[0]}\n"
-            f"2. Стиль: {info[1]}\n"
-            f"3. Материал: {info[2]}\n"
-            f"4. Особенности: {info[3]}\n"
-            f"5. Сроки: {info[4]}\n"
-            f"📱 Телефон: {phone}"
-        )
-        bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
-        bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
-        user_state.pop(user_id, None)
-        user_answers.pop(user_id, None)
 
 # ========================
 # WEBHOOK
