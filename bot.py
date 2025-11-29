@@ -6,39 +6,17 @@ import telebot
 # Настройки
 # ========================
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # сюда потом вставишь ID группы
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 if not TOKEN:
     raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
 
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
 # ========================
-# ЛОГИРОВАНИЕ ВСЕГО, ЧТО ПРИХОДИТ
+# Вопросы для опроса
 # ========================
-@bot.message_handler(func=lambda msg: True)
-def log_all(msg):
-    # вывод в логи Render
-    print("\n========== NEW MESSAGE ==========")
-    print(f"Chat ID: {msg.chat.id}")
-    print(f"Chat type: {msg.chat.type}")
-    print(f"User ID: {msg.from_user.id}")
-    print(f"Text: {msg.text}")
-    print("=================================\n")
-
-    # Если это группа — покажем ID
-    if msg.chat.type in ["group", "supergroup"]:
-        bot.send_message(msg.chat.id, "Группу вижу! Посмотри ID в логах Render.")
-    else:
-        process_private(msg)
-
-
-# ========================
-# ЛОГИКА ДЛЯ ЛИЧКИ
-# ========================
-user_state = {}
-user_answers = {}
-
 questions = [
     "1️⃣ Какую мебель планируете заказать?",
     "2️⃣ В каком стиле хотите?",
@@ -46,12 +24,35 @@ questions = [
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-def process_private(message):
-    if message.chat.type != "private":
-        return
+# Хранение состояния пользователя
+user_state = {}
+user_answers = {}
 
+# ========================
+# Логирование всех сообщений
+# ========================
+@bot.message_handler(func=lambda msg: True)
+def log_all(msg):
+    print("\n=== NEW MESSAGE ===")
+    print(f"Chat ID: {msg.chat.id}")
+    print(f"Type: {msg.chat.type}")
+    print(f"User ID: {msg.from_user.id}")
+    print(f"Text: {msg.text}")
+    print("==================\n")
+
+    if msg.chat.type == "private":
+        process_private(msg)
+    else:
+        if msg.chat.type in ["group", "supergroup"]:
+            bot.send_message(msg.chat.id, "Группу вижу! Посмотрите ID в логах Render.")
+
+# ========================
+# Логика для лички
+# ========================
+def process_private(message):
     user_id = message.chat.id
 
+    # Команда /start
     if message.text == "/start":
         user_state[user_id] = 0
         user_answers[user_id] = []
@@ -65,6 +66,7 @@ def process_private(message):
 
     step = user_state[user_id]
 
+    # Пока есть вопросы
     if step < len(questions):
         user_answers[user_id].append(message.text)
         user_state[user_id] += 1
@@ -72,16 +74,18 @@ def process_private(message):
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
         else:
+            # Кнопка для контакта
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
             bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
+    # Получаем телефон
     phone = message.contact.phone_number if message.contact else message.text
 
+    # Формируем заявку
     info = user_answers[user_id]
-
     text = (
         "🔔 *Новая заявка!* \n\n"
         f"1. Мебель: {info[0]}\n"
@@ -92,23 +96,24 @@ def process_private(message):
         f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
     )
 
+    # Отправка админу
     if ADMIN_ID != 0:
         bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
 
     bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
                      reply_markup=telebot.types.ReplyKeyboardRemove())
 
+    # Чистим состояние
     user_state.pop(user_id)
     user_answers.pop(user_id)
-
 
 # ========================
 # Webhook для Render
 # ========================
-app = Flask(__name__)
+WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
 
 bot.remove_webhook()
-bot.set_webhook(url=f"https://kitchen-bot-ou9m.onrender.com/{TOKEN}")
+bot.set_webhook(url=WEBHOOK_URL)
 
 @app.route(f"/{TOKEN}", methods=['POST'])
 def receive_update():
@@ -121,7 +126,9 @@ def receive_update():
 def index():
     return "Bot is running", 200
 
-
+# ========================
+# Запуск Flask
+# ========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
