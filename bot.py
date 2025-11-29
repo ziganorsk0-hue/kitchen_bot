@@ -5,22 +5,13 @@ import telebot
 # ========================
 # Настройки
 # ========================
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # Токен бота
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # После узнавания ID вставишь сюда
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # <-- ВСТАВЬ СЮДА ID ГРУППЫ
 
 if not TOKEN:
     raise ValueError("Ошибка: TELEGRAM_TOKEN не задан!")
 
 bot = telebot.TeleBot(TOKEN)
-
-# ========================
-# ВРЕМЕННЫЙ хендлер для получения ID группы
-# ========================
-@bot.message_handler(func=lambda msg: msg.chat.type in ["group", "supergroup"])
-def get_group_id(message):
-    group_id = message.chat.id
-    print(f"===== GROUP ID =====\n{group_id}")  # <-- ID будет в логах Render
-    bot.send_message(group_id, f"Группу вижу! ID: {group_id}. Проверьте логи Render.")
 
 # ========================
 # Основная логика бота
@@ -35,9 +26,6 @@ questions = [
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-# ========================
-# Старт
-# ========================
 @bot.message_handler(commands=['start'])
 def start(message):
     if message.chat.type != "private":
@@ -50,9 +38,6 @@ def start(message):
     bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
     bot.send_message(user_id, questions[0])
 
-# ========================
-# Обработка ответов
-# ========================
 @bot.message_handler(func=lambda msg: msg.chat.type == "private")
 def handle_answers(message):
     user_id = message.chat.id
@@ -63,26 +48,27 @@ def handle_answers(message):
 
     step = user_state[user_id]
 
-    # Сохраняем ответ
+    # Сохраняем ответы
     if step < len(questions):
         user_answers[user_id].append(message.text)
         user_state[user_id] += 1
 
+        # Следующий вопрос
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
             return
         else:
-            # Запрос контакта
+            # Просим номер телефона
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
             bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
             return
 
-    # Телефон
+    # Обработка контакта
     phone = message.contact.phone_number if message.contact else message.text
-
     info = user_answers[user_id]
+
     text = (
         "🔔 *Новая заявка!* \n\n"
         f"1. Мебель: {info[0]}\n"
@@ -93,15 +79,20 @@ def handle_answers(message):
         f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
     )
 
+    # Отправляем в группу, если указана
     if ADMIN_ID != 0:
         bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
 
-    bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
-                     reply_markup=telebot.types.ReplyKeyboardRemove())
+    bot.send_message(
+        user_id,
+        "Спасибо! Я передал заявку мастеру.",
+        reply_markup=telebot.types.ReplyKeyboardRemove()
+    )
 
-    # Очистка
+    # Чистим состояние
     user_state.pop(user_id)
     user_answers.pop(user_id)
+
 
 # ========================
 # Webhook для Render
@@ -121,6 +112,7 @@ def receive_update():
 @app.route("/")
 def index():
     return "Bot is running", 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
