@@ -5,11 +5,14 @@ import telebot
 # ========================
 # Настройки
 # ========================
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+TOKEN = os.getenv("TELEGRAM_TOKEN")  # токен бота
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # ID администратора
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # публичный домен Render
 
 if not TOKEN:
-    raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
+    raise ValueError("TELEGRAM_TOKEN не задан!")
+if not RENDER_URL:
+    raise ValueError("RENDER_EXTERNAL_URL не задан!")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -60,10 +63,10 @@ def log_all(msg):
 # ========================
 def process_private(message):
     user_id = message.chat.id
+
     if message.text == "/start" and user_id not in user_state:
         user_state[user_id] = 0
         user_answers[user_id] = []
-        bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
         bot.send_message(user_id, questions[0])
         return
 
@@ -72,6 +75,7 @@ def process_private(message):
         return
 
     step = user_state[user_id]
+
     if step < len(questions):
         user_answers[user_id].append(message.text)
         user_state[user_id] += 1
@@ -79,14 +83,12 @@ def process_private(message):
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
         else:
-            # Кнопка для телефона
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
             bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
-    # Получаем телефон
     phone = message.contact.phone_number if message.contact else message.text
     info = user_answers[user_id]
 
@@ -110,12 +112,8 @@ def process_private(message):
     user_answers.pop(user_id)
 
 # ========================
-# Webhook для Render
+# Настройка webhook
 # ========================
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
-if not RENDER_URL:
-    raise ValueError("Ошибка: RENDER_EXTERNAL_URL не задана!")
-
 WEBHOOK_URL = f"https://{RENDER_URL}/{TOKEN}"
 
 bot.remove_webhook()
