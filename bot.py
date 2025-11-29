@@ -6,15 +6,35 @@ import telebot
 # Настройки
 # ========================
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # <-- ВСТАВЬ СЮДА ID ГРУППЫ
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # сюда потом вставишь ID группы
 
 if not TOKEN:
-    raise ValueError("Ошибка: TELEGRAM_TOKEN не задан!")
+    raise ValueError("Ошибка: переменная окружения TELEGRAM_TOKEN не задана!")
 
 bot = telebot.TeleBot(TOKEN)
 
 # ========================
-# Основная логика бота
+# ЛОГИРОВАНИЕ ВСЕГО, ЧТО ПРИХОДИТ
+# ========================
+@bot.message_handler(func=lambda msg: True)
+def log_all(msg):
+    # вывод в логи Render
+    print("\n========== NEW MESSAGE ==========")
+    print(f"Chat ID: {msg.chat.id}")
+    print(f"Chat type: {msg.chat.type}")
+    print(f"User ID: {msg.from_user.id}")
+    print(f"Text: {msg.text}")
+    print("=================================\n")
+
+    # Если это группа — покажем ID
+    if msg.chat.type in ["group", "supergroup"]:
+        bot.send_message(msg.chat.id, "Группу вижу! Посмотри ID в логах Render.")
+    else:
+        process_private(msg)
+
+
+# ========================
+# ЛОГИКА ДЛЯ ЛИЧКИ
 # ========================
 user_state = {}
 user_answers = {}
@@ -26,21 +46,18 @@ questions = [
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-@bot.message_handler(commands=['start'])
-def start(message):
+def process_private(message):
     if message.chat.type != "private":
         return
 
     user_id = message.chat.id
-    user_state[user_id] = 0
-    user_answers[user_id] = []
 
-    bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
-    bot.send_message(user_id, questions[0])
-
-@bot.message_handler(func=lambda msg: msg.chat.type == "private")
-def handle_answers(message):
-    user_id = message.chat.id
+    if message.text == "/start":
+        user_state[user_id] = 0
+        user_answers[user_id] = []
+        bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
+        bot.send_message(user_id, questions[0])
+        return
 
     if user_id not in user_state:
         bot.send_message(user_id, "Нажмите /start, чтобы начать.")
@@ -48,25 +65,21 @@ def handle_answers(message):
 
     step = user_state[user_id]
 
-    # Сохраняем ответы
     if step < len(questions):
         user_answers[user_id].append(message.text)
         user_state[user_id] += 1
 
-        # Следующий вопрос
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
-            return
         else:
-            # Просим номер телефона
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
             bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
-            return
+        return
 
-    # Обработка контакта
     phone = message.contact.phone_number if message.contact else message.text
+
     info = user_answers[user_id]
 
     text = (
@@ -79,17 +92,12 @@ def handle_answers(message):
         f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
     )
 
-    # Отправляем в группу, если указана
     if ADMIN_ID != 0:
         bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
 
-    bot.send_message(
-        user_id,
-        "Спасибо! Я передал заявку мастеру.",
-        reply_markup=telebot.types.ReplyKeyboardRemove()
-    )
+    bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
+                     reply_markup=telebot.types.ReplyKeyboardRemove())
 
-    # Чистим состояние
     user_state.pop(user_id)
     user_answers.pop(user_id)
 
