@@ -4,12 +4,6 @@ from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 import datetime
-import locale
-
-# ========================
-# Русская локализация для дат
-# ========================
-locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
 # ========================
 # Переменные окружения
@@ -41,6 +35,22 @@ questions = [
     "4️⃣ Есть ли особые требования к размерам или конструкции?",
     "5️⃣ Когда планируете начать проект / нужен замер?"
 ]
+
+# ========================
+# Русские дни недели и месяцы
+# ========================
+RU_MONTHS = {
+    1: "Января", 2: "Февраля", 3: "Марта", 4: "Апреля",
+    5: "Мая", 6: "Июня", 7: "Июля", 8: "Августа",
+    9: "Сентября", 10: "Октября", 11: "Ноября", 12: "Декабря"
+}
+
+RU_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+def format_date_ru(date_obj):
+    day_of_week = RU_DAYS[date_obj.weekday()]
+    month = RU_MONTHS[date_obj.month]
+    return f"{day_of_week}, {date_obj.day} {month}"
 
 # ========================
 # Главное меню
@@ -97,7 +107,7 @@ def greet_user(user_id):
     bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
 
 # ========================
-# Календарь на 30 дней
+# Календарь на 30 дней (русский)
 # ========================
 def build_calendar():
     markup = InlineKeyboardMarkup(row_width=7)
@@ -105,8 +115,8 @@ def build_calendar():
     buttons = []
     for i in range(30):
         day = today + datetime.timedelta(days=i)
-        label = day.strftime("%a, %d %b")  # Пн, 01 Ноя
-        callback = f"day_{day.isoformat()}"  # YYYY-MM-DD
+        label = format_date_ru(day)
+        callback = f"day_{day.isoformat()}"
         buttons.append(InlineKeyboardButton(label, callback_data=callback))
     markup.add(*buttons)
     return markup
@@ -117,9 +127,9 @@ def build_calendar():
 def handle_day_selection(call):
     bot.answer_callback_query(call.id)
     user_id = call.message.chat.id
-    date_iso = call.data[4:]  # yyyy-mm-dd
+    date_iso = call.data[4:]
     date_obj = datetime.date.fromisoformat(date_iso)
-    formatted_date = date_obj.strftime("%A, %d %B")
+    formatted_date = format_date_ru(date_obj)
 
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     btn = KeyboardButton("Отправить номер телефона", request_contact=True)
@@ -142,7 +152,7 @@ def process_messages(msg):
     user_id = msg.chat.id
     step = user_state.get(user_id)
 
-    # Если запись на замер
+    # Запись на замер
     if isinstance(step, str) and step.startswith("phone_for_measure_"):
         date = step.replace("phone_for_measure_", "")
         phone = msg.contact.phone_number if msg.contact else msg.text
@@ -151,7 +161,7 @@ def process_messages(msg):
         user_state.pop(user_id, None)
         return
 
-    # Если шаг — вопросы заявки
+    # Вопросы заявки
     if isinstance(step, int):
         user_answers.setdefault(user_id, []).append(msg.text)
         step += 1
@@ -159,7 +169,6 @@ def process_messages(msg):
             user_state[user_id] = step
             bot.send_message(user_id, questions[step])
         else:
-            # Последний шаг — запрос телефона
             user_state[user_id] = "phone_for_request"
             markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = KeyboardButton("Отправить номер телефона", request_contact=True)
@@ -167,7 +176,7 @@ def process_messages(msg):
             bot.send_message(user_id, "Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
-    # Получение телефона для заявки
+    # Телефон для заявки
     if step == "phone_for_request":
         phone = msg.contact.phone_number if msg.contact else msg.text
         info = user_answers.get(user_id, [])
@@ -182,7 +191,6 @@ def process_messages(msg):
         )
         bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
         bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
-
         user_state.pop(user_id, None)
         user_answers.pop(user_id, None)
 
