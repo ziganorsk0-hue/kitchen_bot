@@ -2,28 +2,29 @@ import os
 import sys
 from flask import Flask, request
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+import datetime
 
 # ========================
 # Переменные окружения
 # ========================
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # только домен
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 if not TOKEN or not ADMIN_ID or not RENDER_URL:
-    print("❌ Ошибка: убедитесь, что заданы TELEGRAM_TOKEN, ADMIN_ID и RENDER_EXTERNAL_URL")
+    print("❌ Ошибка: TELEGRAM_TOKEN, ADMIN_ID или RENDER_EXTERNAL_URL не заданы")
     sys.exit(1)
 
 ADMIN_ID = int(ADMIN_ID)
 WEBHOOK_URL = f"{RENDER_URL}/{TOKEN}"
-print(f"✅ WEBHOOK_URL: {WEBHOOK_URL}")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# ========================
-# Вопросы для пользователя
-# ========================
+user_state = {}
+user_answers = {}
+
 questions = [
     "1️⃣ Какую мебель планируете заказать?",
     "2️⃣ В каком стиле хотите?",
@@ -31,8 +32,17 @@ questions = [
     "4️⃣ На какой примерно бюджет ориентируетесь?"
 ]
 
-user_state = {}
-user_answers = {}
+# ========================
+# М И Н И  -  М Е Н Ю
+# ========================
+def get_main_menu():
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("📅 Записаться на замер", callback_data="measure"))
+    markup.add(InlineKeyboardButton("📝 Оставить заявку", callback_data="start_request"))
+    markup.add(InlineKeyboardButton("📞 Связаться", url="https://t.me/+7927677341"))
+    markup.add(InlineKeyboardButton("ℹ️ О компании", callback_data="about"))
+    return markup
+
 
 # ========================
 # /start
@@ -40,105 +50,139 @@ user_answers = {}
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
+    bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
+
+
+# ========================
+# ОБРАБОТКА МИНИ-МЕНЮ
+# ========================
+@bot.callback_query_handler(func=lambda call: call.data == "about")
+def about(call):
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, "Мы производим мебель на заказ. 🚀")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "start_request")
+def start_request(call):
+    user_id = call.message.chat.id
+    bot.answer_callback_query(call.id)
+
     user_state[user_id] = 0
     user_answers[user_id] = []
-    bot.send_message(user_id, "Здравствуйте! 👋 Давайте уточним несколько моментов.")
+
+    bot.send_message(user_id, "📝 Давайте оформим заявку.")
     bot.send_message(user_id, questions[0])
 
-# ========================
-# Логирование сообщений
-# ========================
-@bot.message_handler(func=lambda msg: True)
-def log_all(msg):
-    print("\n=== NEW MESSAGE ===")
-    print(f"Chat ID: {msg.chat.id}")
-    print(f"Type: {msg.chat.type}")
-    print(f"User ID: {msg.from_user.id}")
-    print(f"Text: {msg.text}")
-    print("==================\n")
-
-    if msg.chat.type == "private":
-        process_private(msg)
-    elif msg.chat.type in ["group", "supergroup"]:
-        bot.send_message(msg.chat.id, "Группу вижу! Посмотрите ID в логах Render.")
 
 # ========================
-# Логика личных сообщений
+# К А Л Е Н Д А Р Ь  Д Л Я  З А М Е Р А
 # ========================
-def process_private(message):
-    user_id = message.chat.id
+def build_calendar():
+    markup = InlineKeyboardMarkup()
+    today = datetime.date.today()
 
+    for i in range(7):
+        day = today + datetime.timedelta(days=i)
+        label = day.strftime("%d.%m (%a)")
+        markup.add(InlineKeyboardButton(label, callback_data=f"day_{day}"))
+
+    return markup
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "measure")
+def measure(call):
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, "Выберите удобный день:", reply_markup=build_calendar())
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("day_"))
+def choose_day(call):
+    bot.answer_callback_query(call.id)
+    date = call.data[4:]
+
+    bot.send_message(call.message.chat.id, f"Вы выбрали день: *{date}*\nТеперь оставьте телефон.", 
+                     parse_mode="Markdown")
+
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    btn = KeyboardButton("Отправить номер телефона", request_contact=True)
+    markup.add(btn)
+
+    user_state[call.message.chat.id] = "phone_for_measure"
+    bot.send_message(call.message.chat.id, "Нажмите кнопку ниже:", reply_markup=markup)
+
+
+# ========================
+# ОБРАБОТКА ЗАЯВКИ ПО ВОПРОСАМ
+# ========================
+@bot.message_handler(func=lambda msg: True, content_types=["text", "contact"])
+def process(msg):
+    user_id = msg.chat.id
+
+    # === завершение записи на замер ===
+    if user_state.get(user_id) == "phone_for_measure":
+        phone = msg.contact.phone_number if msg.contact else msg.text
+
+        bot.send_message(ADMIN_ID, f"📅 *Запись на замер*\nТелефон: {phone}", parse_mode="Markdown")
+        bot.send_message(user_id, "Спасибо! Мы свяжемся с вами.", reply_markup=ReplyKeyboardRemove())
+
+        user_state.pop(user_id, None)
+        return
+
+    # === начинается заявка ===
     if user_id not in user_state:
-        bot.send_message(user_id, "Нажмите /start, чтобы начать.")
         return
 
     step = user_state[user_id]
 
     if step < len(questions):
-        user_answers[user_id].append(message.text)
+        user_answers[user_id].append(msg.text)
         user_state[user_id] += 1
 
         if user_state[user_id] < len(questions):
             bot.send_message(user_id, questions[user_state[user_id]])
         else:
-            markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-            btn = telebot.types.KeyboardButton("Отправить номер телефона", request_contact=True)
+            markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            btn = KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
-            bot.send_message(user_id, "Спасибо! Теперь оставьте номер телефона:", reply_markup=markup)
+            bot.send_message(user_id, "Теперь оставьте номер телефона:", reply_markup=markup)
         return
 
-    phone = message.contact.phone_number if message.contact else message.text
+    # === отправка заявки ===
+    phone = msg.contact.phone_number if msg.contact else msg.text
     info = user_answers[user_id]
 
-    text = (
-        "🔔 *Новая заявка!* \n\n"
+    txt = (
+        "🔔 *Новая заявка!*\n\n"
         f"1. Мебель: {info[0]}\n"
         f"2. Стиль: {info[1]}\n"
         f"3. Ремонт: {info[2]}\n"
         f"4. Бюджет: {info[3]}\n"
-        f"📱 Телефон: {phone}\n"
-        f"🧍 Клиент: @{message.from_user.username if message.from_user.username else 'Не указан'}"
+        f"📱 Телефон: {phone}"
     )
 
-    bot.send_message(ADMIN_ID, text, parse_mode="Markdown")
-    bot.send_message(user_id, "Спасибо! Я передал заявку мастеру.",
-                     reply_markup=telebot.types.ReplyKeyboardRemove())
+    bot.send_message(ADMIN_ID, txt, parse_mode="Markdown")
+    bot.send_message(user_id, "Спасибо! Заявка отправлена.", reply_markup=ReplyKeyboardRemove())
 
     user_state.pop(user_id)
     user_answers.pop(user_id)
 
+
 # ========================
-# Настройка webhook
+# WEBHOOK
 # ========================
 bot.remove_webhook()
-try:
-    bot.set_webhook(url=WEBHOOK_URL)
-    print("✅ Webhook установлен успешно!")
-except Exception as e:
-    print("❌ Ошибка при установке webhook:", e)
-    sys.exit(1)
+bot.set_webhook(url=WEBHOOK_URL)
 
-# ========================
-# Flask маршруты
-# ========================
 @app.route(f"/{TOKEN}", methods=['POST'])
-def receive_update():
-    json_str = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "OK", 200
-
-@app.route(f"/{TOKEN}", methods=['GET'])
-def test_webhook():
-    return "Webhook OK", 200
+def webhook():
+    bot.process_new_updates([telebot.types.Update.de_json(request.data.decode("utf-8"))])
+    return "ok"
 
 @app.route("/")
 def index():
     return "Bot is running", 200
 
-# ========================
-# Запуск Flask
-# ========================
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
