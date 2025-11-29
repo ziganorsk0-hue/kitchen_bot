@@ -22,9 +22,9 @@ WEBHOOK_URL = f"{RENDER_URL}/{TOKEN}"
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-user_state = {}
-user_answers = {}
-users_started = set()  # пользователи, которым уже показали кнопку "Начать"
+user_state = {}      # Хранит шаг заявки или состояние замера
+user_answers = {}    # Хранит ответы пользователей для заявки
+users_started = set()  # Пользователи, которым уже показана кнопка "Начать"
 
 # ========================
 # Вопросы для заявки
@@ -93,7 +93,7 @@ def handle_menu(call):
                          "Оставляйте заявку — я свяжусь с вами для уточнения всех деталей. 🚀")
     elif call.data == "start_request":
         # Начало заявки
-        user_state[user_id] = {"step": 0, "type": "request"}
+        user_state[user_id] = 0
         user_answers[user_id] = []
         bot.send_message(user_id, "📝 Давайте оформим заявку.")
         bot.send_message(user_id, questions[0])
@@ -154,7 +154,7 @@ def process_messages(msg):
     user_id = msg.chat.id
     state = user_state.get(user_id)
 
-    if not state:
+    if state is None:
         return
 
     # --- Запись на замер ---
@@ -167,18 +167,17 @@ def process_messages(msg):
         return
 
     # --- Заявка на мебель ---
-    if isinstance(state, dict) and state.get("type") == "request":
-        step = state["step"]
+    if isinstance(state, int):
+        step = state
         user_answers.setdefault(user_id, []).append(msg.text)
         next_step = step + 1
 
         if next_step < len(questions):
-            # Отправляем следующий вопрос
-            user_state[user_id]["step"] = next_step
+            user_state[user_id] = next_step
             bot.send_message(user_id, questions[next_step])
         else:
             # Последний вопрос -> просим телефон
-            user_state[user_id]["type"] = "phone_for_request"
+            user_state[user_id] = "phone_for_request"
             markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             btn = KeyboardButton("Отправить номер телефона", request_contact=True)
             markup.add(btn)
@@ -186,7 +185,7 @@ def process_messages(msg):
         return
 
     # --- Телефон для заявки ---
-    if isinstance(state, dict) and state.get("type") == "phone_for_request":
+    if state == "phone_for_request":
         phone = msg.contact.phone_number if msg.contact else msg.text
         info = user_answers.get(user_id, [])
         txt = (
