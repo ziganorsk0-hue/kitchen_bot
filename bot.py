@@ -2,7 +2,10 @@ import sys
 import os
 from flask import Flask, request
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telebot.types import (
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+)
 import datetime
 import calendar
 
@@ -20,12 +23,15 @@ if not TOKEN or not ADMIN_ID or not RENDER_URL:
 ADMIN_ID = int(ADMIN_ID)
 WEBHOOK_URL = f"{RENDER_URL}/{TOKEN}"
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 app = Flask(__name__)
 
-user_state = {}
+# ========================
+# Память
+# ========================
 users_started = set()
-calendar_page = {}  # хранение текущего месяца для каждого пользователя
+user_state = {}
+calendar_page = {}
 
 # ========================
 # Русские дни недели и месяцы
@@ -47,53 +53,61 @@ def get_main_menu():
     return markup
 
 # ========================
-# Кнопка "Начать" при первом сообщении
+# Первый старт — только один раз
 # ========================
-@bot.message_handler(func=lambda message: True, content_types=["text"])
+@bot.message_handler(func=lambda m: m.chat.id not in users_started, content_types=["text"])
 def show_start_button(message):
     user_id = message.chat.id
-    if user_id not in users_started:
-        users_started.add(user_id)
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
-        bot.send_message(user_id, "Привет! Нажми кнопку чтобы начать:", reply_markup=markup)
+    users_started.add(user_id)
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🚀 Начать", callback_data="start"))
+
+    bot.send_message(user_id, "Привет! Нажмите кнопку чтобы начать:", reply_markup=markup)
 
 # ========================
-# Обработка callback
+# CALLBACK HANDLER
 # ========================
 @bot.callback_query_handler(func=lambda call: True)
-def handle_menu(call):
+def handle_callbacks(call):
     bot.answer_callback_query(call.id)
     user_id = call.message.chat.id
 
     if call.data == "start":
         greet_user(user_id)
+
     elif call.data == "about":
-        bot.send_message(user_id,
-                         "Я частный мастер, Павел.\n"
-                         "Изготавливаю корпусную мебель на заказ с 2006 года.\n"
-                         "Реализую проекты по вашим размерам и пожеланиям.\n"
-                         "Свяжитесь со мной через запись на замер. 🚀")
+        bot.send_message(
+            user_id,
+            "Я частный мастер, Павел.\n"
+            "Изготавливаю корпусную мебель на заказ с 2006 года.\n"
+            "Делаю кухни, шкафы, гардеробные.\n"
+            "Запишитесь на замер, и я сделаю расчёт. 🚀"
+        )
+
     elif call.data == "measure":
-        # Устанавливаем текущий месяц
         today = datetime.date.today()
         calendar_page[user_id] = (today.year, today.month)
-        bot.send_message(user_id, f"Выберите день для замера:", reply_markup=build_calendar(user_id))
-    elif call.data.startswith("day_"):
-        handle_day_selection(call)
+        bot.send_message(user_id, "Выберите день:", reply_markup=build_calendar(user_id))
+
     elif call.data.startswith("month_"):
-        action, year, month = call.data.split("_")
-        calendar_page[user_id] = (int(year), int(month))
+        _, y, m = call.data.split("_")
+        calendar_page[user_id] = (int(y), int(m))
         bot.edit_message_reply_markup(chat_id=user_id, message_id=call.message.message_id,
                                       reply_markup=build_calendar(user_id))
-    elif call.data == "ignore":
-        pass  # Для кнопок-заголовков
+
+    elif call.data.startswith("day_"):
+        handle_day_selection(call)
 
 # ========================
-# Главное меню после нажатия "Начать"
+# Приветствие и меню
 # ========================
 def greet_user(user_id):
-    bot.send_message(user_id, "Здравствуйте! 👋\nВыберите действие:", reply_markup=get_main_menu())
+    bot.send_message(
+        user_id,
+        "Здравствуйте! 👋\nВыберите действие:",
+        reply_markup=get_main_menu()
+    )
 
 # ========================
 # Построение календаря
@@ -102,83 +116,95 @@ def build_calendar(user_id):
     year, month = calendar_page[user_id]
     markup = InlineKeyboardMarkup()
 
-    # Название месяца
+    # Заголовок
     markup.add(InlineKeyboardButton(f"{RU_MONTHS[month]} {year}", callback_data="ignore"))
 
-    # Дни недели как заголовок
-    header_buttons = [InlineKeyboardButton(day, callback_data="ignore") for day in RU_DAYS]
-    markup.row(*header_buttons)
+    # Дни недели
+    markup.row(*[InlineKeyboardButton(d, callback_data="ignore") for d in RU_DAYS])
 
     # Дни месяца
-    month_calendar = calendar.Calendar(firstweekday=0).itermonthdays(year, month)
-    week_buttons = []
-    for i, day in enumerate(month_calendar):
+    dates = calendar.Calendar(firstweekday=0).itermonthdays(year, month)
+    week = []
+
+    for day in dates:
         if day == 0:
-            week_buttons.append(InlineKeyboardButton(" ", callback_data="ignore"))
+            week.append(InlineKeyboardButton(" ", callback_data="ignore"))
         else:
-            day_obj = datetime.date(year, month, day)
-            callback = f"day_{day_obj.isoformat()}"
-            week_buttons.append(InlineKeyboardButton(str(day), callback_data=callback))
+            dt = datetime.date(year, month, day)
+            week.append(InlineKeyboardButton(str(day), callback_data=f"day_{dt.isoformat()}"))
 
-        if len(week_buttons) == 7:
-            markup.row(*week_buttons)
-            week_buttons = []
+        if len(week) == 7:
+            markup.row(*week)
+            week = []
 
-    if week_buttons:
-        markup.row(*week_buttons)
+    if week:
+        markup.row(*week)
 
-    # Кнопки листания месяца
-    prev_month = month - 1
-    prev_year = year
-    if prev_month == 0:
-        prev_month = 12
-        prev_year -= 1
-    next_month = month + 1
-    next_year = year
-    if next_month == 13:
-        next_month = 1
-        next_year += 1
+    # Переключение месяца
+    prev_m = month - 1
+    prev_y = year
+    if prev_m == 0:
+        prev_m = 12
+        prev_y -= 1
+
+    next_m = month + 1
+    next_y = year
+    if next_m == 13:
+        next_m = 1
+        next_y += 1
 
     markup.row(
-        InlineKeyboardButton("◀️ Назад", callback_data=f"month_{prev_year}_{prev_month}"),
-        InlineKeyboardButton("▶️ Вперед", callback_data=f"month_{next_year}_{next_month}")
+        InlineKeyboardButton("◀️ Назад", callback_data=f"month_{prev_y}_{prev_m}"),
+        InlineKeyboardButton("▶️ Вперёд", callback_data=f"month_{next_y}_{next_m}")
     )
 
     return markup
 
 # ========================
-# Выбор даты для замера
+# Выбор дня
 # ========================
 def handle_day_selection(call):
-    bot.answer_callback_query(call.id)
     user_id = call.message.chat.id
     date_iso = call.data[4:]
 
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    btn = KeyboardButton("Отправить номер телефона", request_contact=True)
-    markup.add(btn)
-
     user_state[user_id] = {"type": "measure", "date": date_iso}
+
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add(KeyboardButton("Отправить номер телефона", request_contact=True))
 
     bot.send_message(
         user_id,
-        f"Вы выбрали день: {date_iso}\nОставьте номер телефона для записи на замер:",
+        f"Вы выбрали: <b>{date_iso}</b>\n"
+        "Пожалуйста, отправьте номер телефона:",
         reply_markup=markup
     )
 
 # ========================
-# Обработка сообщений для замера
+# Обработка номера телефона
 # ========================
 @bot.message_handler(content_types=["text", "contact"])
-def process_messages(msg):
+def process_user_message(msg):
     user_id = msg.chat.id
     state = user_state.get(user_id)
 
-    if isinstance(state, dict) and state.get("type") == "measure":
+    if not state:
+        return  # игнорируем, если нет контекста
+
+    if state["type"] == "measure":
         phone = msg.contact.phone_number if msg.contact else msg.text
         date = state["date"]
-        bot.send_message(ADMIN_ID, f"📅 *Запись на замер*\nДата: {date}\nТелефон: {phone}", parse_mode="Markdown")
-        bot.send_message(user_id, "Спасибо! Мы свяжемся с вами для подтверждения.", reply_markup=ReplyKeyboardRemove())
+
+        bot.send_message(
+            ADMIN_ID,
+            f"<b>📅 Запись на замер</b>\nДата: {date}\nТелефон: {phone}"
+        )
+
+        bot.send_message(
+            user_id,
+            "Спасибо! Я свяжусь с вами для подтверждения.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
         user_state.pop(user_id, None)
 
 # ========================
@@ -187,7 +213,7 @@ def process_messages(msg):
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL)
 
-@app.route(f"/{TOKEN}", methods=['POST'])
+@app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     bot.process_new_updates([telebot.types.Update.de_json(request.data.decode("utf-8"))])
     return "ok"
@@ -196,6 +222,7 @@ def webhook():
 def index():
     return "Bot is running", 200
 
+# Запуск Flask (Render)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
