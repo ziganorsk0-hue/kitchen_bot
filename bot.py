@@ -14,10 +14,10 @@ import calendar
 # ========================
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")  # https://your-bot.onrender.com
 
 if not TOKEN or not ADMIN_ID or not RENDER_URL:
-    print("❌ Missing TELEGRAM_TOKEN, ADMIN_ID or RENDER_EXTERNAL_URL")
+    print("❌ Не заданы TELEGRAM_TOKEN, ADMIN_ID или RENDER_EXTERNAL_URL")
     sys.exit(1)
 
 ADMIN_ID = int(ADMIN_ID)
@@ -26,7 +26,9 @@ WEBHOOK_URL = f"{RENDER_URL}/{TOKEN}"
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 app = Flask(__name__)
 
-# состояния пользователей
+# ========================
+# Состояния пользователей
+# ========================
 user_state = {}
 calendar_page = {}
 
@@ -48,7 +50,7 @@ def get_main_menu():
     return markup
 
 # ========================
-# /start
+# Команда /start
 # ========================
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -159,7 +161,7 @@ def build_calendar(uid):
     return markup
 
 # ========================
-# Выбор дня для замера
+# День выбран для замера
 # ========================
 def handle_day_selection(call):
     uid = call.message.chat.id
@@ -237,23 +239,25 @@ def get_phone(msg):
     user_state.pop(uid, None)
 
 # ========================
-# WEBHOOK
+# WEBHOOK для Render
 # ========================
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL)
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    bot.process_new_updates([telebot.types.Update.de_json(request.data.decode())])
-    return "ok"
+    json_string = request.data.decode("utf-8")
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "ok", 200
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
     return "Bot is running", 200
 
 # ========================
-# Запуск
+# Запуск на Render
 # ========================
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 10000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
